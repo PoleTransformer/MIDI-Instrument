@@ -316,8 +316,8 @@ void floppySingleStep(int channel) {
       digitalWriteFast(floppyStep, LOW);
     }
     if (channel == 6) {
-      digitalWriteFast(floppyStep, HIGH);
-      digitalWriteFast(floppyStep, LOW);
+      digitalWriteFast(floppyStep2, HIGH);
+      digitalWriteFast(floppyStep2, LOW);
     }
     floppyCount[channel]++;
     if (floppyCount >= maxFloppy) {
