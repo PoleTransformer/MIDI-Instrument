@@ -3,26 +3,26 @@
 #include "pitches.h"
 
 //Stepper Motors:
-#define stepPin_M1 4
-#define stepPin_M2 5
-#define dirPin_M1 7
-#define dirPin_M2 2
-#define disablePin1 9
-#define disablePin2 8
+#define stepPin_M1 26
+#define stepPin_M2 27
+#define dirPin_M1 24
+#define dirPin_M2 25
+#define disablePin1 22
+#define disablePin2 23
 
 //Floppy Drives:
 #define floppyStep 6
-#define floppyDirPin 3
-#define floppyEnable 13
-#define floppyStep2 6
-#define floppyDirPin2 3
-#define floppyEnable2 13
+#define floppyDirPin 7
+#define floppyEnable 9
+#define floppyStep2 29
+#define floppyDirPin2 30
+#define floppyEnable2 28
 
 //Hard Drives:
 #define bassDrum 11
 #define snareDrum 10
 #define highDrum 12
-#define highDrum2 12
+#define highDrum2 8
 
 //MIDI Configuration:
 #define maxChannel 6 //excluding channel 10
@@ -31,21 +31,22 @@
 #define hddChannels 4 //hdd channels
 
 //Variable definitions:
-int pitchTarget[maxChannel + 1]; //Holds the target pitch
-int pitchCurrent[maxChannel + 1]; //Holds the current pitch
-int acceleration[maxChannel + 1]; //Acceleration of steppers
-int initialPitch[maxChannel + 1]; //Holds current midi pitch 0-127
-float bendFactor[maxChannel + 1]; //Holds bend factor value
-int bendSens[maxChannel + 1]; //2 semitones
-bool motorDirections[maxChannel + 1]; //Directions of the steppers
-bool motorStallMode[maxChannel + 1]; //Steppers stop rotating, but still make noise
-unsigned long prevMicros[maxChannel + 1] = {}; //Last time
 
-unsigned long prevDrum[hddChannels];
-int drumDuration[hddChannels];
+int pitchTarget[] = {-1,-1,-1,-1,-1,-1,-1};
+int pitchCurrent[] = {-1,-1,-1,-1,-1,-1,-1};
+int acceleration[] = {-1,-1,-1,-1,-1,-1,-1};
+int initialPitch[] = {-1,-1,-1,-1,-1,-1,-1};
+float bendFactor[] = {1,1,1,1,1,1,1};
+int bendSens[] = {2,2,2,2,2,2,2};
+bool motorDirections[] = {0,0,0,0,0,0,0};
+unsigned long prevMicros[] = {0,0,0,0,0,0,0};
+bool motorStallMode[] = {0,0,0,0,0,0,0};
 
-bool floppyDir[maxChannel + 1];
-int floppyCount[maxChannel + 1];
+unsigned long prevDrum[] = {0,0,0,0};
+int drumDuration[] = {0,0,0,0};
+
+bool floppyDir[] = {0,0,0,0,0,0,0};
+int floppyCount[] = {0,0,0,0,0,0,0};
 int maxFloppy = 75;
 
 int controlValue1 = -1;
@@ -57,16 +58,7 @@ MIDI_CREATE_DEFAULT_INSTANCE(); //use default MIDI settings
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void setup()
-{
-  resetAll(); //initialize arrays
-  memset(motorDirections, 0, sizeof(motorDirections));
-  memset(motorStallMode, 0, sizeof(motorStallMode));
-  memset(prevMicros, 0, sizeof(prevMicros));
-  memset(prevDrum, 0, sizeof(prevDrum));
-  memset(drumDuration, -1, sizeof(drumDuration));
-  memset(floppyDir, 0, sizeof(floppyDir));
-  memset(floppyCount, 0, sizeof(floppyCount));
-
+{ 
   pinMode(stepPin_M1, OUTPUT);
   pinMode(stepPin_M2, OUTPUT);
   pinMode(dirPin_M1, OUTPUT);
@@ -219,15 +211,15 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
       digitalWriteFast(snareDrum, HIGH);
       prevDrum[1] = micros();
     }
-    else if (pitch == 39 || pitch > 44) { //high drum
-      drumDuration[2] = map(velocity, 1, 127, 1, 2000);
-      digitalWriteFast(highDrum2, HIGH);
-      prevDrum[2] = micros();
-    }
-    else { //high drum 2
+    else if (pitch == 39 || pitch > 44) { //high drum 2
       drumDuration[3] = map(velocity, 1, 127, 1, 2000);
-      digitalWriteFast(highDrum, HIGH);
+      digitalWriteFast(highDrum2, HIGH);
       prevDrum[3] = micros();
+    }
+    else { //high drum
+      drumDuration[2] = map(velocity, 1, 127, 1, 1500);
+      digitalWriteFast(highDrum, HIGH);
+      prevDrum[2] = micros();
     }
   }
 }
@@ -255,7 +247,7 @@ void handleNoteOff(byte channel, byte pitch, byte velocity) //MIDI Note OFF Comm
     if (channel == 6) {
       digitalWriteFast(floppyEnable2, HIGH);
     }
-    pitchTarget[channel] = -1;//set motor pitch to -1
+    pitchTarget[channel] = -1;//set motor target pitch to -1
     pitchCurrent[channel] = -1;//Reset to -1
     initialPitch[channel] = -1;//MIDI note reset
   }
@@ -320,7 +312,7 @@ void floppySingleStep(int channel) {
       digitalWriteFast(floppyStep2, LOW);
     }
     floppyCount[channel]++;
-    if (floppyCount >= maxFloppy) {
+    if (floppyCount[channel] >= maxFloppy) {
       floppyDir[channel] = !floppyDir[channel];
       if (floppyDir[5]) {
         digitalWriteFast(floppyDirPin, HIGH);
