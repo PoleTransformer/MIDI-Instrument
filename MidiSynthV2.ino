@@ -7,22 +7,18 @@
 #define stepPin_M2 27
 #define dirPin_M1 24
 #define dirPin_M2 25
-#define disablePin1 22
-#define disablePin2 23
 
 //Floppy Drives:
-#define floppyStep 6
-#define floppyDirPin 7
-#define floppyEnable 9
-#define floppyStep2 29
-#define floppyDirPin2 30
-#define floppyEnable2 28
+#define floppyStep 8
+#define floppyDirPin 9
+#define floppyStep2 6
+#define floppyDirPin2 7
 
 //Hard Drives:
-#define bassDrum 11
-#define snareDrum 10
+#define bassDrum 10
+#define snareDrum 11
 #define highDrum 12
-#define highDrum2 8
+#define highDrum2 13
 
 //MIDI Configuration:
 #define maxChannel 6 //excluding channel 10
@@ -35,22 +31,22 @@
 
 int pitchTarget[maxChannel + 1];
 int pitchCurrent[maxChannel + 1];
-int acceleration[maxChannel + 1];
-int initialPitch[maxChannel + 1];
+byte acceleration[maxChannel + 1];
+byte initialPitch[maxChannel + 1];
+byte bendSens[maxChannel + 1];
 float bendFactor[maxChannel + 1];
-int bendSens[maxChannel + 1];
-bool motorDirections[maxChannel + 1];
 unsigned long prevMicros[maxChannel + 1];
+bool motorDirections[maxChannel + 1];
 bool motorStallMode[maxChannel + 1];
 
 unsigned long prevDrum[hddChannels];
-int drumDuration[hddChannels];
+uint16_t drumDuration[hddChannels];
 
 bool floppyDir[maxChannel + 1];
-int floppyCount[maxChannel + 1];
+byte floppyCount[maxChannel + 1];
 
-int controlValue1 = -1;
-int controlValue2 = -1;
+byte controlValue1 = -1;
+byte controlValue2 = -1;
 MIDI_CREATE_DEFAULT_INSTANCE(); //use default MIDI settings
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -63,16 +59,12 @@ void setup()
   pinMode(stepPin_M2, OUTPUT);
   pinMode(dirPin_M1, OUTPUT);
   pinMode(dirPin_M2, OUTPUT);
-  pinMode(disablePin1, OUTPUT);
-  pinMode(disablePin2, OUTPUT);
 
   pinMode(floppyStep, OUTPUT);
   pinMode(floppyDirPin, OUTPUT);
-  pinMode(floppyEnable, OUTPUT);
   pinMode(floppyStep2, OUTPUT);
   pinMode(floppyDirPin2, OUTPUT);
-  pinMode(floppyEnable2, OUTPUT);
-
+  
   pinMode(bassDrum, OUTPUT);
   pinMode(snareDrum, OUTPUT);
   pinMode(highDrum, OUTPUT);
@@ -80,8 +72,8 @@ void setup()
 
   digitalWriteFast(dirPin_M1, LOW);
   digitalWriteFast(dirPin_M2, LOW);
-  digitalWriteFast(disablePin1, HIGH);//Starts disabled!
-  digitalWriteFast(disablePin2, HIGH);//Starts disabled!
+  digitalWriteFast(stepPin_M1, HIGH);
+  digitalWriteFast(stepPin_M2, HIGH);
   resetAll();
 
   MIDI.begin(MIDI_CHANNEL_OMNI); //listen to all MIDI channels
@@ -152,25 +144,7 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
       pitchTarget[channel] = pitchVals[pitch]; //Save the pitch to a global target array.
       pitchCurrent[channel] = pitchVals[pitch]; //No acceleration!
     }
-
-    if (channel == 1) {
-      digitalWriteFast(disablePin1, LOW);
-    }
-
-    if (channel == 2) {
-      digitalWriteFast(disablePin2, LOW);
-    }
-
-    if (channel == 5) {
-      digitalWriteFast(floppyEnable, LOW);
-      pitchCurrent[5] = pitchVals[pitch];
-    }
-
-    if (channel == 6) {
-      digitalWriteFast(floppyEnable2, LOW);
-      pitchCurrent[6] = pitchVals[pitch];
-    }
-
+    
     initialPitch[channel] = pitch;
     prevMicros[channel] = micros();
   }
@@ -212,28 +186,27 @@ void handleNoteOff(byte channel, byte pitch, byte velocity) //MIDI Note OFF Comm
 {
   if (channel > 0 && channel <= maxChannel)
   {
+    pitchTarget[channel] = -1;//set motor target pitch to -1
+    pitchCurrent[channel] = -1;//Reset to -1
+    initialPitch[channel] = -1;//MIDI note reset
+    acceleration[channel] = -1;//Accel Reset
     if (channel == 1)
     {
-      digitalWriteFast(disablePin1, HIGH);
-      acceleration[0] = -1;
+      digitalWriteFast(stepPin_M1, HIGH);
     }
 
     if (channel == 2)
     {
-      digitalWriteFast(disablePin2, HIGH);
-      acceleration[1] = -1;
+      digitalWriteFast(stepPin_M2, HIGH);
     }
 
     if (channel == 5) {
-      digitalWriteFast(floppyEnable, HIGH);
+      digitalWriteFast(floppyStep, HIGH);
     }
 
     if (channel == 6) {
-      digitalWriteFast(floppyEnable2, HIGH);
+      digitalWriteFast(floppyStep2, HIGH);
     }
-    pitchTarget[channel] = -1;//set motor target pitch to -1
-    pitchCurrent[channel] = -1;//Reset to -1
-    initialPitch[channel] = -1;//MIDI note reset
   }
 }
 
@@ -325,6 +298,7 @@ void myPitchBend(byte channel, int val) {
       pitchCurrent[channel] = pitchVals[initialPitch[channel]];
       pitchTarget[channel] = pitchCurrent[channel];
       bendFactor[channel] = 1;
+      return;
     }
     val = val * -1;
     int bendRange = bendSens[channel];
@@ -409,8 +383,6 @@ void resetAll() {
   }
   digitalWriteFast(floppyDirPin, LOW);
   digitalWriteFast(floppyDirPin2, LOW);
-  digitalWriteFast(floppyEnable, LOW);
-  digitalWriteFast(floppyEnable2, LOW);
 
   for (int i = 0; i < maxFloppy; i++) {
     digitalWriteFast(floppyStep, HIGH);
@@ -419,10 +391,10 @@ void resetAll() {
     digitalWriteFast(floppyStep2, LOW);
     delay(5);
   }
-  digitalWriteFast(floppyEnable, HIGH);
-  digitalWriteFast(floppyEnable2, HIGH);
   digitalWriteFast(floppyDirPin, HIGH);
   digitalWriteFast(floppyDirPin2, HIGH);
+  digitalWriteFast(floppyStep, HIGH);
+  digitalWriteFast(floppyStep2, HIGH);
   controlValue1 = -1;
   controlValue2 = -1;
   mute();
