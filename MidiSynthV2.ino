@@ -27,7 +27,7 @@
 #define stepperChannels 2 //stepper channels
 #define floppyChannels 3 //floppy channels
 #define hddChannels 5 //hdd channels
-bool floppyDrum = true; //enable or disable floppy drum. Ensure nothing is playing on channel 7 when enabled!!!
+bool floppyDrum = false; //enable or disable floppy drum. Ensure nothing is playing on channel 7 when enabled!!!
 
 //Variable definitions:
 
@@ -35,6 +35,7 @@ int pitchTarget[maxChannel + 1];
 int pitchCurrent[maxChannel + 1];
 int acceleration[maxChannel + 1];
 byte bendSens[maxChannel + 1];
+byte origPitch[maxChannel + 1];
 float bendFactor[maxChannel + 1];
 unsigned long prevMicros[maxChannel + 1];
 bool motorDirections[maxChannel + 1];
@@ -141,8 +142,10 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
         pitchTarget[channel] = pitchVals[pitch]; //Save the pitch to a global target array.
         pitchCurrent[channel] = pitchVals[pitch]; //No acceleration!
       }
+      origPitch[channel] = pitch;
     }
     else if (channel > stepperChannels) { //Floppy Drives
+      origPitch[channel] = pitch;
       if (pitch > 67) pitch -= 12;
       else if (pitch < 38) pitch += 12;
       pitchCurrent[channel] = pitchVals[pitch];
@@ -199,26 +202,29 @@ void handleNoteOff(byte channel, byte pitch, byte velocity) //MIDI Note OFF Comm
 {
   if (channel > 0 && channel <= maxChannel)
   {
-    pitchCurrent[channel] = -1;//Reset to -1
+    if(origPitch[channel] == pitch) {
+      pitchCurrent[channel] = -1;//Reset to -1
+      origPitch[channel] = -1;
+    }
     if (channel == 1)
     {
       digitalWriteFast(stepPin_M1, HIGH);
     }
 
-    if (channel == 2)
+    else if (channel == 2)
     {
       digitalWriteFast(stepPin_M2, HIGH);
     }
 
-    if (channel == 5) {
+    else if (channel == 5) {
       digitalWriteFast(floppyStep, HIGH);
     }
 
-    if (channel == 6) {
+    else if (channel == 6) {
       digitalWriteFast(floppyStep2, HIGH);
     }
 
-    if (channel == 7) {
+    else if (channel == 7) {
       digitalWriteFast(floppyStep3, HIGH);
     }
   }
@@ -309,7 +315,13 @@ void floppySingleStep(byte channel) {
 void myPitchBend(byte channel, int val) {
   if (channel > 0 && channel <= maxChannel) {
     int bendMap = map(val*-1,-8192,8191,0,126);
-    bendFactor[channel] = bendVal2[bendMap];
+    byte bendRange = bendSens[channel];
+    if(bendRange == 2) {
+      bendFactor[channel] = bendVal2[bendMap];
+    }
+    else if(bendRange == 7) {
+      bendFactor[channel] = bendVal7[bendMap];
+    }
   }
 }
 
@@ -341,6 +353,7 @@ void resetAll() {
     bendSens[i] = 2;
     bendFactor[i] = 1;
     floppyDir[i] = 1;
+    origPitch[i] = 0;
   }
   for (int i = 0; i < hddChannels + 1; i++) {
     prevDrum[i] = 0;
