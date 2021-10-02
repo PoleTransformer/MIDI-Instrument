@@ -184,7 +184,7 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
       digitalWriteFast(snareDrum, HIGH);
       prevDrum[1] = micros();
     }
-    else if (pitch == 39 || pitch == 54 || pitch == 81) { //high drum 2
+    else if (pitch == 39 || pitch == 54 || pitch == 54 || pitch == 81) { //high drum 2
       drumDuration[3] = 1500;
       digitalWriteFast(highDrum2, HIGH);
       prevDrum[3] = micros();
@@ -442,8 +442,8 @@ void myPitchBend(byte channel, int val) {
     if (bendRange == 2) {
       bendFactor[channel] = bendVal2[bendMap];
     }
-    else if (bendRange == 7) {
-      bendFactor[channel] = bendVal7[bendMap];
+    else if (bendRange == 12) {
+      bendFactor[channel] = bendVal12[bendMap];
     }
   }
 }
