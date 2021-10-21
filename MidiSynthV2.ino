@@ -5,8 +5,16 @@
 //Stepper Motors:
 #define stepPin_M1 22
 #define stepPin_M2 24
+#define stepPin_M3 44
+#define stepPin_M4 46
 #define dirPin_M1 23
 #define dirPin_M2 25
+#define dirPin_M3 45
+#define dirPin_M4 47
+#define enable1 8
+#define enable2 9
+#define enable3 6
+#define enable4 7
 
 //Floppy Drives channel_floppy#:
 #define floppyStep5_1 26
@@ -38,28 +46,26 @@
 
 //MIDI Configuration:
 #define maxChannel 7 //excluding channel 10
-#define stepperChannels 2 //stepper channels
+#define stepperChannels 4 //stepper channels
 #define floppyChannels 3 //floppy channels
-#define hddChannels 5 //hdd channels
+#define hddChannels 4 //hdd channels
 #define attack 10 //initial attack for floppy envelope
-#define attackOffset 20 //offset added to initial
+#define attackOffset 10 //offset added to initial
 #define sustain 200 //initial sustain for floppy envelope
 #define sustainOffset 50//offset subtracted from initial
 
 //Variable definitions:
-int pitchTarget[maxChannel + 1];
-int pitchCurrent[maxChannel + 1];
-int acceleration[maxChannel + 1];
-byte bendSens[maxChannel + 1];
-byte origPitch[maxChannel + 1];
-float bendFactor[maxChannel + 1];
-bool motorDirections[maxChannel + 1];
-bool motorStallMode[maxChannel + 1];
+int pitchCurrent[] = { -1, -1, -1, -1, -1, -1, -1, -1};
+float bendFactor[] = {1, 1, 1, 1, 1, 1, 1, 1};
+byte origPitch[] = { -1, -1, -1, -1, -1, -1, -1, -1};
+byte bendSens[] = { 2, 2, 2, 2, 2, 2, 2, 2};
+bool motorDirections[] = {0, 0, 0, 0, 0, 0, 0, 0};
+bool motorStallMode[] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned long prevMicros[] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned long prevMillis[] = {0, 0, 0, 0, 0, 0, 0, 0};
 
-unsigned long prevDrum[hddChannels];
-uint16_t drumDuration[hddChannels];
+unsigned long prevDrum[] = { -1, -1, -1, -1};
+uint16_t drumDuration[] = { -1, -1, -1, -1};
 
 bool floppyDir[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
@@ -79,14 +85,6 @@ void setup()
   for (int i = 22; i < 54; i++) {
     pinMode(i, OUTPUT);
   }
-  for (int i = 26; i < 54; i += 2) {
-    digitalWriteFast(i, HIGH);
-  }
-
-  digitalWriteFast(dirPin_M1, LOW);
-  digitalWriteFast(dirPin_M2, LOW);
-  digitalWriteFast(stepPin_M1, HIGH);
-  digitalWriteFast(stepPin_M2, HIGH);
   resetAll();
 
   MIDI.begin(MIDI_CHANNEL_OMNI); //listen to all MIDI channels
@@ -107,6 +105,8 @@ void loop()
   MIDI.read();
   singleStep(1);
   singleStep(2);
+  singleStep(3);
+  singleStep(4);
   floppySingleStep(5);
   floppySingleStep(6);
   floppySingleStep(7);
@@ -140,20 +140,29 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
   {
     if (channel <= stepperChannels) //Stepper Motors
     {
-      if (pitch == 51 || pitch == 52 || pitch == 53 || pitch == 54 || pitch == 55 || pitch == 56 || pitch == 57 || pitch == 58) {
+      if (channel == 1) {
+        digitalWriteFast(enable1, LOW);
+      }
+      else if (channel == 2) {
+        digitalWriteFast(enable2, LOW);
+      }
+      else if (channel == 3) {
+        digitalWriteFast(enable3, LOW);
+      }
+      else if (channel == 4) {
+        digitalWriteFast(enable4, LOW);
+      }
+      if (pitch == 50 || pitch == 51 || pitch == 52) {
         motorStallMode[channel] = HIGH;//The motor now intentionally "stalls" itself flag.
       }
       else {
         motorStallMode[channel] = LOW;//No longer stalling itself.
       }
-      if (pitch > 83) {
-        pitchTarget[channel] = pitchVals[pitch]; //Save the pitch to a global target array.
-        pitchCurrent[channel] = pitchVals[70]; //Force an acceleration from the highest pitch guaranteed to lock the rotor in first step.
-        acceleration[channel] = 70;
+      if (pitch > 81) {
+        pitchCurrent[channel] = pitchVals[pitch - 12];
       }
       else {
-        pitchTarget[channel] = pitchVals[pitch]; //Save the pitch to a global target array.
-        pitchCurrent[channel] = pitchVals[pitch]; //No acceleration!
+        pitchCurrent[channel] = pitchVals[pitch];
       }
     }
     else if (channel > stepperChannels) { //Floppy Drives
@@ -166,7 +175,7 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
   if (channel == 10 && velocity > 0) { //drum
     if (pitch == 35 || pitch == 36) { //bass drum
       if (velocity > 119) {
-        drumDuration[0] = map(velocity, 120, 127, 2000, 2500);
+        drumDuration[0] = map(velocity, 120, 127, 2000, 2350);
       }
       else {
         drumDuration[0] = map(velocity, 1, 119, 1750, 2000);
@@ -184,7 +193,7 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
       digitalWriteFast(snareDrum, HIGH);
       prevDrum[1] = micros();
     }
-    else if (pitch == 39 || pitch == 54 || pitch == 54 || pitch == 81) { //high drum 2
+    else if (pitch == 39 || pitch == 48 || pitch == 50 || pitch == 54 || pitch == 46 || pitch == 51 || pitch == 59 || pitch == 49 || pitch == 57) { //high drum 2
       drumDuration[3] = 1500;
       digitalWriteFast(highDrum2, HIGH);
       prevDrum[3] = micros();
@@ -194,7 +203,7 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
         drumDuration[2] = 1500;
       }
       else {
-        drumDuration[2] = 400;
+        drumDuration[2] = 500;
       }
       digitalWriteFast(highDrum, HIGH);
       prevDrum[2] = micros();
@@ -208,32 +217,41 @@ void handleNoteOff(byte channel, byte pitch, byte velocity) //MIDI Note OFF Comm
   {
     if (origPitch[channel] == pitch) {
       pitchCurrent[channel] = -1;//Reset to -1
-      origPitch[channel] = -1;
-    }
-    if (channel == 1)
-    {
-      digitalWriteFast(stepPin_M1, HIGH);
-    }
+      if (channel == 1)
+      {
+        digitalWriteFast(enable1, HIGH);
+      }
 
-    else if (channel == 2)
-    {
-      digitalWriteFast(stepPin_M2, HIGH);
-    }
+      else if (channel == 2)
+      {
+        digitalWriteFast(enable2, HIGH);
+      }
 
-    else if (channel == 5) {
-      digitalWriteFast(floppyStep5_1, HIGH);
-      digitalWriteFast(floppyStep5_2, HIGH);
-      digitalWriteFast(floppyStep5_3, HIGH);
-    }
-    else if (channel == 6) {
-      digitalWriteFast(floppyStep6_1, HIGH);
-      digitalWriteFast(floppyStep6_2, HIGH);
-      digitalWriteFast(floppyStep6_3, HIGH);
-    }
-    else if (channel == 7) {
-      digitalWriteFast(floppyStep7_1, HIGH);
-      digitalWriteFast(floppyStep7_2, HIGH);
-      digitalWriteFast(floppyStep7_3, HIGH);
+      else if (channel == 3)
+      {
+        digitalWriteFast(enable3, HIGH);
+      }
+
+      else if (channel == 4)
+      {
+        digitalWriteFast(enable4, HIGH);
+      }
+
+      else if (channel == 5) {
+        digitalWriteFast(floppyStep5_1, HIGH);
+        digitalWriteFast(floppyStep5_2, HIGH);
+        digitalWriteFast(floppyStep5_3, HIGH);
+      }
+      else if (channel == 6) {
+        digitalWriteFast(floppyStep6_1, HIGH);
+        digitalWriteFast(floppyStep6_2, HIGH);
+        digitalWriteFast(floppyStep6_3, HIGH);
+      }
+      else if (channel == 7) {
+        digitalWriteFast(floppyStep7_1, HIGH);
+        digitalWriteFast(floppyStep7_2, HIGH);
+        digitalWriteFast(floppyStep7_3, HIGH);
+      }
     }
   }
 }
@@ -246,8 +264,8 @@ void singleStep(byte motorNum)
   {
     if (motorNum == 1)
     {
-      digitalWriteFast(stepPin_M1, HIGH);
       digitalWriteFast(stepPin_M1, LOW);
+      digitalWriteFast(stepPin_M1, HIGH);
       if (motorStallMode[1]) //If we're in stalled motor mode...
       {
         motorDirections[1] = !motorDirections[1]; //Flip the stored direction of the motor.
@@ -261,8 +279,8 @@ void singleStep(byte motorNum)
     }
     else if (motorNum == 2)
     {
-      digitalWriteFast(stepPin_M2, HIGH);
       digitalWriteFast(stepPin_M2, LOW);
+      digitalWriteFast(stepPin_M2, HIGH);
       if (motorStallMode[2]) //If we're in stalled motor mode...
       {
         motorDirections[2] = !motorDirections[2]; //Flip the stored direction of the motor.
@@ -274,12 +292,37 @@ void singleStep(byte motorNum)
         }
       }
     }
-    prevMicros[motorNum] += pitchCurrent[motorNum] * bendFactor[motorNum]; //Keeps track of the last time a tick occurred for the next time.
-    if (pitchCurrent[motorNum] > pitchTarget[motorNum]) //Not yet on target?
+    else if (motorNum == 3)
     {
-      acceleration[motorNum]++;
-      pitchCurrent[motorNum] = pitchVals[acceleration[motorNum]]; //Move the current closer to the target (acceleration control)!
+      digitalWriteFast(stepPin_M3, LOW);
+      digitalWriteFast(stepPin_M3, HIGH);
+      if (motorStallMode[3]) //If we're in stalled motor mode...
+      {
+        motorDirections[3] = !motorDirections[3]; //Flip the stored direction of the motor.
+        if (motorDirections[3]) {
+          digitalWriteFast(dirPin_M3, HIGH);
+        }
+        else {
+          digitalWriteFast(dirPin_M3, LOW);
+        }
+      }
     }
+    else if (motorNum == 4)
+    {
+      digitalWriteFast(stepPin_M4, LOW);
+      digitalWriteFast(stepPin_M4, HIGH);
+      if (motorStallMode[4]) //If we're in stalled motor mode...
+      {
+        motorDirections[4] = !motorDirections[4]; //Flip the stored direction of the motor.
+        if (motorDirections[4]) {
+          digitalWriteFast(dirPin_M4, HIGH);
+        }
+        else {
+          digitalWriteFast(dirPin_M4, LOW);
+        }
+      }
+    }
+    prevMicros[motorNum] += pitchCurrent[motorNum] * bendFactor[motorNum]; //Keeps track of the last time a tick occurred for the next time.
   }
 }
 
@@ -437,56 +480,63 @@ void floppy(byte index) {
 
 void myPitchBend(byte channel, int val) {
   if (channel > 0 && channel <= maxChannel) {
-    int bendMap = map(val * -1, -8192, 8191, 0, 126);
-    byte bendRange = bendSens[channel];
-    if (bendRange == 2) {
-      bendFactor[channel] = bendVal2[bendMap];
+    if (val == 0) {
+      bendFactor[channel] = 1;
     }
-    else if (bendRange == 12) {
-      bendFactor[channel] = bendVal12[bendMap];
+    else {
+      int bendMap = map(val * -1, -8192, 8191, 0, 126);
+      byte bendRange = bendSens[channel];
+      if (bendRange == 2) {
+        bendFactor[channel] = bendVal2[bendMap];
+      }
+      else if (bendRange == 12) {
+        bendFactor[channel] = bendVal12[bendMap];
+      }
     }
   }
 }
 
 void myControlChange(byte channel, byte firstByte, byte secondByte) {
-  if (firstByte == 121) { //reset all controllers
-    resetAll();
-  }
-  if (firstByte == 120) { //mute all sounds
-    mute();
-  }
-  if (firstByte == 101) {
-    controlValue1 = secondByte;
-  }
-  if (firstByte == 100) {
-    controlValue2 = secondByte;
-  }
-  if (firstByte == 6 && controlValue1 == 0 && controlValue2 == 0 && (channel > 0 && channel <= maxChannel)) { //pitch bend sensitivity
-    bendSens[channel] = secondByte;
-    controlValue1 = -1;
-    controlValue2 = -1;
+  if (channel > 0 && channel <= maxChannel) {
+    if (firstByte == 121) { //reset all controllers
+      resetAll();
+    }
+    else if (firstByte == 120 || firstByte == 123) { //mute all sounds
+      mute();
+    }
+    else if (firstByte == 101) {
+      controlValue1 = secondByte;
+    }
+    else if (firstByte == 100) {
+      controlValue2 = secondByte;
+    }
+    else if (firstByte == 6 && controlValue1 == 0 && controlValue2 == 0) { //pitch bend sensitivity
+      bendSens[channel] = secondByte;
+      controlValue1 = -1;
+      controlValue2 = -1;
+    }
   }
 }
 
 void resetAll() {
-  for (int i = 0; i < maxChannel + 1; i++) {
-    motorDirections[i] = 0;
-    motorStallMode[i] = 0;
+  for (int i = 0; i <= maxChannel; i++) {
     bendSens[i] = 2;
     bendFactor[i] = 1;
-    origPitch[i] = 0;
   }
-  for (int i = 0; i < hddChannels + 1; i++) {
-    prevDrum[i] = 0;
-    drumDuration[i] = 0;
+  for (int i = 26; i < 54; i += 2) {
+    digitalWriteFast(i, HIGH);
   }
-  controlValue1 = -1;
-  controlValue2 = -1;
-  mute();
+  for (int i = 6; i < 13; i++) {
+    digitalWriteFast(i, HIGH);
+  }
+  digitalWriteFast(dirPin_M1, LOW);
+  digitalWriteFast(dirPin_M2, LOW);
+  digitalWriteFast(dirPin_M3, LOW);
+  digitalWriteFast(dirPin_M4, LOW);
 }
 
 void mute() {
-  for (int i = 0; i < maxChannel + 1; i++) {
+  for (int i = 0; i <= maxChannel; i++) {
     pitchCurrent[i] = -1;
   }
 }
