@@ -45,6 +45,7 @@
 #define highDrum2 5
 
 //MIDI Configuration:
+bool floppyDrum = false; //enable floppy drum on floppy channel 7
 #define maxChannel 7 //excluding channel 10
 #define stepperChannels 4 //stepper channels
 #define floppyChannels 3 //floppy channels
@@ -57,15 +58,15 @@
 //Variable definitions:
 int pitchCurrent[] = { -1, -1, -1, -1, -1, -1, -1, -1};
 float bendFactor[] = {1, 1, 1, 1, 1, 1, 1, 1};
-byte origPitch[] = { -1, -1, -1, -1, -1, -1, -1, -1};
+byte origPitch[] = { 0, 0, 0, 0, 0, 0, 0, 0};
 byte bendSens[] = { 2, 2, 2, 2, 2, 2, 2, 2};
 bool motorDirections[] = {0, 0, 0, 0, 0, 0, 0, 0};
 bool motorStallMode[] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned long prevMicros[] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned long prevMillis[] = {0, 0, 0, 0, 0, 0, 0, 0};
 
-unsigned long prevDrum[] = { -1, -1, -1, -1};
-uint16_t drumDuration[] = { -1, -1, -1, -1};
+unsigned long prevDrum[] = { 0, 0, 0, 0, 0};
+uint16_t drumDuration[] = { 0, 0, 0, 0, 0};
 
 bool floppyDir[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
@@ -130,6 +131,12 @@ void processDrum() {
     drumDuration[3] = 0;
     digitalWriteFast(highDrum2, LOW);
   }
+  else if (drumDuration[4] > 0 && (micros() - prevDrum[4]) >= drumDuration[4]) { //floppy Drum
+    drumDuration[4] = 0;
+    digitalWriteFast(floppyStep7_1, HIGH);
+    digitalWriteFast(floppyStep7_2, HIGH);
+    digitalWriteFast(floppyStep7_3, HIGH);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -166,8 +173,13 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
       }
     }
     else if (channel > stepperChannels) { //Floppy Drives
-      pitchCurrent[channel] = pitchVals[pitch];
-      prevMillis[channel] = millis();
+      if (floppyDrum && channel == 7) {
+        //ignore message
+      }
+      else {
+        pitchCurrent[channel] = pitchVals[pitch];
+        prevMillis[channel] = millis();
+      }
     }
     origPitch[channel] = pitch;
     prevMicros[channel] = micros();
@@ -199,14 +211,44 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
       prevDrum[3] = micros();
     }
     else { //high drum
-      if (velocity > 119) {
-        drumDuration[2] = 1500;
+      if (floppyDrum) {
+        digitalWriteFast(floppyStep7_1, LOW);
+        digitalWriteFast(floppyStep7_2, LOW);
+        digitalWriteFast(floppyStep7_3, LOW);
+        floppyDir[6] = !floppyDir[6];
+        floppyDir[7] = !floppyDir[7];
+        floppyDir[8] = !floppyDir[8];
+        if (floppyDir[6]) {
+          digitalWriteFast(floppyDir7_1, HIGH);
+        }
+        else {
+          digitalWriteFast(floppyDir7_1, LOW);
+        }
+        if (floppyDir[7]) {
+          digitalWriteFast(floppyDir7_2, HIGH);
+        }
+        else {
+          digitalWriteFast(floppyDir7_2, LOW);
+        }
+        if (floppyDir[8]) {
+          digitalWriteFast(floppyDir7_3, HIGH);
+        }
+        else {
+          digitalWriteFast(floppyDir7_3, LOW);
+        }
+        prevDrum[4] = micros();
+        drumDuration[4] = 10000;
       }
       else {
-        drumDuration[2] = 500;
+        if (velocity > 119) {
+          drumDuration[2] = 1500;
+        }
+        else {
+          drumDuration[2] = 500;
+        }
+        digitalWriteFast(highDrum, HIGH);
+        prevDrum[2] = micros();
       }
-      digitalWriteFast(highDrum, HIGH);
-      prevDrum[2] = micros();
     }
   }
 }
