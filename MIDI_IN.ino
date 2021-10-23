@@ -1,20 +1,24 @@
 byte incomingByte;
-byte data;
-byte channel;
-byte velocity;
-byte bendMsb;
-byte bendLsb;
-byte controlNum;
-byte controlVal;
-int lsb;
-int msb;
-byte note = 0;
-int action = -1;
-int bendVal = 0;
+byte midiData;
+byte midiChannel;
+byte midiVelocity;
+byte midiBendMsb;
+byte midiBendLsb;
+int midiLsb;
+int midiMsb;
+byte midiNote = 0;
+int midiBendVal = 0;
+int midiAction = -1;
+
+/////////////////////////
+
 float bendFactor = 1;
+int frequency = -1;
+byte origPitch = 0;
 
 void setup() {
   Serial.begin(115200);
+  pinMode(13, OUTPUT);
   pinMode(9, OUTPUT);
   cli();//disable interrupts
   TCCR1A = 0;// set entire TCCR1A register to 0
@@ -35,63 +39,74 @@ ISR(TIMER1_COMPA_vect) {
     incomingByte = Serial.read();
     int command = (incomingByte & 0b10000000) >> 7;
     if (command == 1) { //status
-      msb = (incomingByte & 0b11110000) >> 4;
-      lsb = incomingByte & 0b00001111;
+      midiMsb = (incomingByte & 0b11110000) >> 4;
+      midiLsb = incomingByte & 0b00001111;
+      midiChannel = midiLsb;
     }
     else if (command == 0) { //data
-      data = incomingByte;
+      midiData = incomingByte;
     }
-    if (msb == 9 && action == -1) { //note on
-      channel = lsb;
-      action = 0;
+    if (midiMsb == 9 && midiAction == -1) { //note on
+      midiAction = 0;
     }
-    else if (action == 0) {
-      note = data;
-      action = 1;
+    else if (midiAction == 0) {
+      midiNote = midiData;
+      midiAction = 1;
     }
-    else if (action == 1) {
-      velocity = data;
-      action = -1;
+    else if (midiAction == 1) {
+      midiVelocity = midiData;
+      handleNoteOn(midiChannel+1, midiNote, midiVelocity);
+      midiAction = -1;
     }
-    if (msb == 8) { //note off
-      channel = lsb;
-      note = 0;
+    if (midiMsb == 8 && midiAction == -1) { //note off
+      midiAction = 2;
     }
-    if (msb == 11 && action == -1) { //control change
-      channel = lsb;
-      action = 2;
+    else if (midiAction == 2) {
+      midiNote = midiData;
+      midiAction = 3;
     }
-    else if (action == 2) { //receive controller value
-      controlNum = data;
-      action = 3;
+    else if (midiAction == 3) {
+      midiVelocity = midiData;
+      handleNoteOff(midiChannel+1, midiNote, midiVelocity);
+      midiAction = -1;
     }
-    else if (action == 3) {
-      controlVal = data;
-      action = -1;
+    if (midiMsb == 14 && midiAction == -1) { //pitch bend
+      midiAction = 4;
     }
-    if (msb == 14 && action == -1) { //pitch bend
-      channel = lsb;
-      action = 4;
+    else if (midiAction == 4) { //receive bendmsb
+      midiBendLsb = midiData;
+      midiAction = 5;
     }
-    else if (action == 4) { //receive bendmsb
-      bendLsb = data;
-      action = 5;
-    }
-    else if (action == 5) {
-      bendMsb = data;
-      bendVal = (bendMsb << 7) | bendLsb;
-      myPitchBend(channel,bendVal-8192);
-      action = -1;
+    else if (midiAction == 5) {
+      midiBendMsb = midiData;
+      midiBendVal = (midiBendMsb << 7) | midiBendLsb;
+      myPitchBend(midiChannel+1, midiBendVal - 8192);
+      midiAction = -1;
     }
   }
 }
 
 void loop () {
-  if (note != 0) {
-    tone(9, (440 * pow(2, ((float)note - 69) / 12)) * bendFactor);
+  if(frequency != -1) {
+    tone(9,frequency*bendFactor);
   }
-  else if(note == 0) {
+  else {
     noTone(9);
+  }
+}
+
+void handleNoteOn(byte channel, byte note, byte velocity) {
+  if(channel == 1 && velocity > 0) {
+    origPitch = note;
+    frequency = (440 * pow(2, ((float)note - 69) / 12));
+  }
+}
+
+void handleNoteOff(byte channel, byte note, byte velocity) {
+  if(channel == 1) {
+    if(note == origPitch) {
+      frequency = -1;
+    }
   }
 }
 
@@ -100,5 +115,5 @@ void myPitchBend(byte channel, int bend) {
   bendF /= 8192;
   bendF *= 12;
   bendF /= 12;
-  bendFactor = pow(2,bendF);
+  bendFactor = pow(2, bendF);
 }
