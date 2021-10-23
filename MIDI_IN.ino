@@ -11,6 +11,7 @@ int msb;
 byte note = 0;
 int action = -1;
 int bendVal = 0;
+float bendFactor = 1;
 
 void setup() {
   Serial.begin(115200);
@@ -19,11 +20,11 @@ void setup() {
   TCCR1A = 0;// set entire TCCR1A register to 0
   TCCR1B = 0;// same for TCCR1B
   TCNT1  = 0;//initialize counter value to 0
-  OCR1A = 1;// = (16*10^6) / (1*1024) - 1 (must be <65536)
+  OCR1A = 19;// = (16*10^6) / (1*1024) - 1 (must be <65536)
   // turn on CTC mode
   TCCR1B |= (1 << WGM12);
-  // Set CS10 and CS12 bits for 1024 prescaler
-  TCCR1B |= (1 << CS12) | (1 << CS10);
+  // Set CS11 for 8 prescaler
+  TCCR1B |= (1 << CS11);
   // enable timer compare interrupt
   TIMSK1 |= (1 << OCIE1A);
   sei();//enable interrupts
@@ -79,7 +80,7 @@ ISR(TIMER1_COMPA_vect) {
     else if (action == 5) {
       bendMsb = data;
       bendVal = (bendMsb << 7) | bendLsb;
-      bendVal *= -1;
+      myPitchBend(channel,bendVal-8192);
       action = -1;
     }
   }
@@ -87,9 +88,17 @@ ISR(TIMER1_COMPA_vect) {
 
 void loop () {
   if (note != 0) {
-    tone(9, 440 * pow(2, ((float)note - 69) / 12 + ((float)bendVal - 8192) / (4096 * 12)));
+    tone(9, (440 * pow(2, ((float)note - 69) / 12)) * bendFactor);
   }
   else if(note == 0) {
     noTone(9);
   }
+}
+
+void myPitchBend(byte channel, int bend) {
+  float bendF = bend;
+  bendF /= 8192;
+  bendF *= 12;
+  bendF /= 12;
+  bendFactor = pow(2,bendF);
 }
