@@ -1,5 +1,4 @@
 #include <digitalWriteFast.h>
-#include <MIDI.h>
 #include "pitches.h"
 
 //Stepper Motors:
@@ -69,8 +68,20 @@ unsigned long prevDrum[] = {0, 0, 0, 0}; //bass drum, snare drum, high drum 2, h
 unsigned long currentMicros = 0; //master timer
 byte controlValue1 = -1;
 byte controlValue2 = -1;
-MIDI_CREATE_DEFAULT_INSTANCE(); //use default MIDI settings
 
+byte incomingByte;
+byte midiData;
+byte midiChannel;
+byte midiVelocity;
+byte midiBendMsb;
+byte midiBendLsb;
+byte midiControlNum;
+byte midiControlVal;
+int midiLsb;
+int midiMsb;
+byte midiNote = 0;
+int midiBendVal = 0;
+int midiAction = -1;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -89,12 +100,6 @@ void setup()
   for (int i = 6; i < 13; i++) {
     digitalWriteFast(i, HIGH);
   }
-
-  MIDI.begin(MIDI_CHANNEL_OMNI); //listen to all MIDI channels
-  MIDI.setHandleNoteOn(handleNoteOn); //execute function when note on message is received
-  MIDI.setHandleNoteOff(handleNoteOff); //execute function when note off message is received
-  MIDI.setHandlePitchBend(myPitchBend); //execute function when pitch bend message is received
-  MIDI.setHandleControlChange(myControlChange); //execute function when control change message is received
   Serial.begin(115200); //Allows for serial MIDI communication. Comment this line when using mocaLUFA.
   cli();//stop interrupts
 
@@ -135,7 +140,67 @@ ISR(TIMER2_COMPA_vect) {
 
 void loop()
 {
-  MIDI.read();
+  if (Serial.available() > 0) {
+    incomingByte = Serial.read();
+    int command = (incomingByte & 0b10000000) >> 7;
+    if (command == 1) { //status
+      midiMsb = (incomingByte & 0b11110000) >> 4;
+      midiLsb = incomingByte & 0b00001111;
+      midiChannel = midiLsb;
+    }
+    else if (command == 0) { //data
+      midiData = incomingByte;
+    }
+    if (midiMsb == 9 && midiAction == -1) { //note on
+      midiAction = 0;
+    }
+    else if (midiAction == 0) {
+      midiNote = midiData;
+      midiAction = 1;
+    }
+    else if (midiAction == 1) {
+      midiVelocity = midiData;
+      handleNoteOn(midiChannel + 1, midiNote, midiVelocity);
+      midiAction = -1;
+    }
+    if (midiMsb == 8 && midiAction == -1) { //note off
+      midiAction = 2;
+    }
+    else if (midiAction == 2) {
+      midiNote = midiData;
+      midiAction = 3;
+    }
+    else if (midiAction == 3) {
+      midiVelocity = midiData;
+      handleNoteOff(midiChannel + 1, midiNote, midiVelocity);
+      midiAction = -1;
+    }
+    if (midiMsb == 14 && midiAction == -1) { //pitch bend
+      midiAction = 4;
+    }
+    else if (midiAction == 4) { //receive bendmsb
+      midiBendLsb = midiData;
+      midiAction = 5;
+    }
+    else if (midiAction == 5) {
+      midiBendMsb = midiData;
+      midiBendVal = (midiBendMsb << 7) | midiBendLsb;
+      myPitchBend(midiChannel + 1, midiBendVal - 8192);
+      midiAction = -1;
+    }
+    if (midiMsb == 11 && midiAction == -1) {
+      midiAction = 6;
+    }
+    else if (midiAction == 6) { //control change
+      midiControlNum = midiData;
+      midiAction = 7;
+    }
+    else if(midiAction == 7) {
+      midiControlVal = midiData;
+      myControlChange(midiChannel + 1, midiControlNum, midiControlVal);
+      midiAction = -1;
+    }
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
