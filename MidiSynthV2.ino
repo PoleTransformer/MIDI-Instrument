@@ -45,7 +45,6 @@
 #define highDrum2 5
 
 //MIDI Configuration:
-bool floppyDrum = true; //enable floppy drum on floppy channel 7
 #define maxChannel 7 //excluding channel 10
 #define stepperChannels 4 //stepper channels
 #define floppyChannels 3 //floppy channels
@@ -62,14 +61,12 @@ byte origPitch[] = { 0, 0, 0, 0, 0, 0, 0, 0};
 byte bendSens[] = { 2, 2, 2, 2, 2, 2, 2, 2};
 bool motorDirections[] = {0, 0, 0, 0, 0, 0, 0, 0};
 bool motorStallMode[] = {0, 0, 0, 0, 0, 0, 0, 0};
+bool floppyDir[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 unsigned long prevMicros[] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned long floppyEnvelope[] = {0, 0, 0, 0, 0, 0, 0, 0}; //prevMicros, but doesnt update each step
+unsigned long prevDrum[] = {0, 0, 0, 0}; //bass drum, snare drum, high drum 2, high drum
 
-unsigned long prevDrum[] = { 0, 0, 0, 0, 0};
-uint16_t drumDuration[] = { 0, 0, 0, 0, 0};
-
-bool floppyDir[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-
+unsigned long currentMicros = 0; //master timer
 byte controlValue1 = -1;
 byte controlValue2 = -1;
 MIDI_CREATE_DEFAULT_INSTANCE(); //use default MIDI settings
@@ -86,7 +83,12 @@ void setup()
   for (int i = 22; i < 54; i++) {
     pinMode(i, OUTPUT);
   }
-  resetAll();
+  for (int i = 26; i < 54; i += 2) {
+    digitalWriteFast(i, HIGH);
+  }
+  for (int i = 6; i < 13; i++) {
+    digitalWriteFast(i, HIGH);
+  }
 
   MIDI.begin(MIDI_CHANNEL_OMNI); //listen to all MIDI channels
   MIDI.setHandleNoteOn(handleNoteOn); //execute function when note on message is received
@@ -94,58 +96,89 @@ void setup()
   MIDI.setHandlePitchBend(myPitchBend); //execute function when pitch bend message is received
   MIDI.setHandleControlChange(myControlChange); //execute function when control change message is received
   Serial.begin(115200); //Allows for serial MIDI communication. Comment this line when using mocaLUFA.
+  cli();//stop interrupts
+
+  //set timer2 interrupt every 128us
+  TCCR2A = 0;// set entire TCCR2A register to 0
+  TCCR2B = 0;// same for TCCR2B
+  TCNT2  = 0;//initialize counter value to 0
+  // set compare match register for 7.8khz increments
+  OCR2A = 255;// = (16*10^6) / (7812.5*8) - 1 (must be <256)
+  // turn on CTC mode
+  TCCR2A |= (1 << WGM21);
+  // Set CS11 bit for 8 prescaler
+  TCCR2B |= (1 << CS11);
+  // enable timer compare interrupt
+  TIMSK2 |= (1 << OCIE2A);
+
+  sei();//allow interrupts
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+ISR(TIMER2_COMPA_vect) {
+  currentMicros = micros();
+  singleStep(1);
+  singleStep(2);
+  singleStep(3);
+  singleStep(4);
+  floppySingleStep(5);
+  floppySingleStep(6);
+  floppySingleStep(7);
+  drumBass();
+  drumSnare();
+  drumHigh2();
+  drumHigh();
+}
 
 void loop()
 {
   MIDI.read();
-  unsigned long currentMicros = micros();
-  singleStep(1, currentMicros);
-  singleStep(2, currentMicros);
-  singleStep(3, currentMicros);
-  singleStep(4, currentMicros);
-  floppySingleStep(5, currentMicros);
-  floppySingleStep(6, currentMicros);
-  floppySingleStep(7, currentMicros);
-  processDrum(currentMicros);
-}
-
-void processDrum(unsigned long currentMicros) {
-  if (drumDuration[0] > 0 && (currentMicros - prevDrum[0]) >= drumDuration[0]) { //bass drum
-    drumDuration[0] = 0;
-    digitalWriteFast(bassDrum, LOW);
-  }
-  else if (drumDuration[1] > 0 && (currentMicros - prevDrum[1]) >= drumDuration[1]) { //snare drum
-    drumDuration[1] = 0;
-    digitalWriteFast(snareDrum, LOW);
-  }
-  else if (drumDuration[2] > 0 && (currentMicros - prevDrum[2]) >= drumDuration[2]) { //high drum
-    drumDuration[2] = 0;
-    digitalWriteFast(highDrum, LOW);
-  }
-  else if (drumDuration[3] > 0 && (currentMicros - prevDrum[3]) >= drumDuration[3]) { //high drum 2
-    drumDuration[3] = 0;
-    digitalWriteFast(highDrum2, LOW);
-  }
-  else if (drumDuration[4] > 0 && (currentMicros - prevDrum[4]) >= drumDuration[4]) { //floppy Drum
-    drumDuration[4] = 0;
-    digitalWriteFast(floppyStep7_1, HIGH);
-    digitalWriteFast(floppyStep7_2, HIGH);
-    digitalWriteFast(floppyStep7_3, HIGH);
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void drumBass() {
+  if (prevDrum[0] > 0) { //bass drum
+    if (currentMicros - prevDrum[0] >= 2000) {
+      prevDrum[0] = 0;
+      digitalWriteFast(bassDrum, LOW);
+    }
+  }
+}
+
+void drumSnare() {
+  if (prevDrum[1] > 0) { //snare drum
+    if (currentMicros - prevDrum[1] >= 1250) {
+      prevDrum[1] = 0;
+      digitalWriteFast(snareDrum, LOW);
+    }
+  }
+}
+
+void drumHigh2() {
+  if (prevDrum[2] > 0) { //high drum 2
+    if (currentMicros - prevDrum[2] >= 1500) {
+      prevDrum[2] = 0;
+      digitalWriteFast(highDrum2, LOW);
+    }
+  }
+}
+
+void drumHigh() {
+  if (prevDrum[3] > 0) { //high drum
+    if (currentMicros - prevDrum[3] >= 500) {
+      prevDrum[3] = 0;
+      digitalWriteFast(highDrum, LOW);
+    }
+  }
+}
 
 void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Command
 {
   if ((channel > 0 && channel <= 10) && velocity > 0)
   {
-    unsigned long currentMicros = micros();
     if (channel <= 4) //Stepper Motors
     {
       if (channel == 1) {
@@ -176,71 +209,28 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
       prevMicros[channel] = currentMicros;
     }
     else if (channel >= 5 && channel <= 7) { //Floppy Drives
-      if (floppyDrum && channel == 7) {
-        //ignore message
-      }
-      else {
-        pitchCurrent[channel] = pitchVals[pitch];
-        floppyEnvelope[channel] = currentMicros;
-        prevMicros[channel] = currentMicros;
-        origPitch[channel] = pitch;
-      }
+      pitchCurrent[channel] = pitchVals[pitch];
+      floppyEnvelope[channel] = currentMicros;
+      prevMicros[channel] = currentMicros;
+      origPitch[channel] = pitch;
     }
     else if (channel == 10) {
       if (pitch == 35 || pitch == 36) { //bass drum
-        if (velocity > 119) {
-          drumDuration[0] = map(velocity, 120, 127, 2000, 2350);
-        }
-        else {
-          drumDuration[0] = map(velocity, 1, 119, 1750, 2000);
-        }
         digitalWriteFast(bassDrum, HIGH);
         prevDrum[0] = currentMicros;
       }
       else if (pitch == 38 || pitch == 40) { //snare drum
-        if (velocity > 119) {
-          drumDuration[1] = map(velocity, 120, 127, 2250, 3000);
-        }
-        else {
-          drumDuration[1] = map(velocity, 1, 119, 1000, 1500);
-        }
         digitalWriteFast(snareDrum, HIGH);
         prevDrum[1] = currentMicros;
       }
-      else if (pitch == 39 || pitch == 48 || pitch == 50 || pitch == 54 || pitch == 46 || pitch == 51 || pitch == 59 || pitch == 49 || pitch == 57) { //high drum 2
-        drumDuration[3] = 1500;
+      else if (pitch == 39 || pitch == 48 || pitch == 50 || pitch == 54 || pitch == 46 || pitch == 51
+               || pitch == 59 || pitch == 49 || pitch == 57) { //high drum 2
         digitalWriteFast(highDrum2, HIGH);
-        prevDrum[3] = currentMicros;
+        prevDrum[2] = currentMicros;
       }
       else { //high drum
-        if (floppyDrum) {
-          digitalWriteFast(floppyStep7_1, LOW);
-          digitalWriteFast(floppyStep7_2, LOW);
-          digitalWriteFast(floppyStep7_3, LOW);
-          floppyDir[6] = !floppyDir[6];
-          if (floppyDir[6]) {
-            digitalWriteFast(floppyDir7_1, HIGH);
-            digitalWriteFast(floppyDir7_2, HIGH);
-            digitalWriteFast(floppyDir7_3, HIGH);
-          }
-          else {
-            digitalWriteFast(floppyDir7_1, LOW);
-            digitalWriteFast(floppyDir7_2, LOW);
-            digitalWriteFast(floppyDir7_3, LOW);
-          }
-          prevDrum[4] = currentMicros;
-          drumDuration[4] = 10000;
-        }
-        else {
-          if (velocity > 119) {
-            drumDuration[2] = 1500;
-          }
-          else {
-            drumDuration[2] = 500;
-          }
-          digitalWriteFast(highDrum, HIGH);
-          prevDrum[2] = currentMicros;
-        }
+        digitalWriteFast(highDrum, HIGH);
+        prevDrum[3] = currentMicros;
       }
     }
   }
@@ -293,7 +283,7 @@ void handleNoteOff(byte channel, byte pitch, byte velocity) //MIDI Note OFF Comm
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void singleStep(byte motorNum, unsigned long currentMicros)
+void singleStep(byte motorNum)
 {
   if (pitchCurrent[motorNum] != -1 && ((currentMicros - prevMicros[motorNum]) <= pitchCurrent[motorNum]))
   {
@@ -361,7 +351,7 @@ void singleStep(byte motorNum, unsigned long currentMicros)
   }
 }
 
-void floppySingleStep(byte channel, unsigned long currentMicros) {
+void floppySingleStep(byte channel) {
   if (pitchCurrent[channel] != -1 && ((currentMicros - prevMicros[channel]) <= pitchCurrent[channel])) {
     if (channel == 5) {
       floppy(0);
@@ -512,51 +502,13 @@ void floppy(byte index) {
   }
 }
 
-void myPitchBend(byte channel, int val) {
+void myPitchBend(byte channel, int bend) {
   if (channel > 0 && channel <= maxChannel) {
-    if (val == 0) {
-      bendFactor[channel] = 1;
-    }
-    else {
-      int bendMap = map(val * -1, -8192, 8191, 0, 126);
-      byte bendRange = bendSens[channel];
-      if (bendRange == 2) {
-        bendFactor[channel] = bendVal2[bendMap];
-      }
-      else if (bendRange == 12) {
-        bendFactor[channel] = bendVal12[bendMap];
-      }
-      else if (bendRange == 11) {
-        bendFactor[channel] = bendVal11[bendMap];
-      }
-      else if (bendRange == 10) {
-        bendFactor[channel] = bendVal10[bendMap];
-      }
-      else if (bendRange == 9) {
-        bendFactor[channel] = bendVal9[bendMap];
-      }
-      else if (bendRange == 8) {
-        bendFactor[channel] = bendVal8[bendMap];
-      }
-      else if (bendRange == 7) {
-        bendFactor[channel] = bendVal7[bendMap];
-      }
-      else if (bendRange == 6) {
-        bendFactor[channel] = bendVal6[bendMap];
-      }
-      else if (bendRange == 5) {
-        bendFactor[channel] = bendVal5[bendMap];
-      }
-      else if (bendRange == 4) {
-        bendFactor[channel] = bendVal4[bendMap];
-      }
-      else if (bendRange == 3) {
-        bendFactor[channel] = bendVal3[bendMap];
-      }
-      else if (bendRange == 1) {
-        bendFactor[channel] = bendVal1[bendMap];
-      }
-    }
+    float bendF = bend * -1;
+    bendF /= 8192;
+    bendF *= bendSens[channel];
+    bendF /= 12;
+    bendFactor[channel] = pow(2, bendF);
   }
 }
 
@@ -588,6 +540,7 @@ void resetAll() {
   for (int i = 0; i <= maxChannel; i++) {
     bendSens[i] = 2;
     bendFactor[i] = 1;
+    pitchCurrent[i] = -1;
   }
   for (int i = 26; i < 54; i += 2) {
     digitalWriteFast(i, HIGH);
@@ -595,10 +548,6 @@ void resetAll() {
   for (int i = 6; i < 13; i++) {
     digitalWriteFast(i, HIGH);
   }
-  digitalWriteFast(dirPin_M1, LOW);
-  digitalWriteFast(dirPin_M2, LOW);
-  digitalWriteFast(dirPin_M3, LOW);
-  digitalWriteFast(dirPin_M4, LOW);
 }
 
 void mute() {
@@ -606,6 +555,9 @@ void mute() {
     pitchCurrent[i] = -1;
   }
   for (int i = 26; i < 54; i += 2) {
+    digitalWriteFast(i, HIGH);
+  }
+  for (int i = 6; i < 13; i++) {
     digitalWriteFast(i, HIGH);
   }
 }
