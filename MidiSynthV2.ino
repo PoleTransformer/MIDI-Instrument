@@ -1,41 +1,42 @@
-#include <digitalWriteFast.h>
 #include "pitches.h"
+#define CLR(x,y) (x&=(~_BV(y)))
+#define SET(x,y) (x|=(_BV(y)))
 
 //Stepper Motors:
-#define stepPin_M1 22
-#define stepPin_M2 24
-#define stepPin_M3 44
-#define stepPin_M4 46
-#define dirPin_M1 23
-#define dirPin_M2 25
-#define dirPin_M3 45
-#define dirPin_M4 47
-#define enable1 8
-#define enable2 9
-#define enable3 6
-#define enable4 7
+#define stepPin_M1 22 //CLR(PORTA,0)
+#define stepPin_M2 24 //CLR(PORTA,2)
+#define stepPin_M3 44 //CLR(PORTL,5)
+#define stepPin_M4 46 //CLR(PORTL,3)
+#define dirPin_M1 23 //CLR(PORTA,1)
+#define dirPin_M2 25 //CLR(PORTA,3)
+#define dirPin_M3 45 //CLR(PORTL,4)
+#define dirPin_M4 47 //CLR(PORTL,2)
+#define enable1 8 //CLR(PORTH,5)
+#define enable2 9 //CLR(PORTH,6)
+#define enable3 6 //CLR(PORTH,3)
+#define enable4 7 //CLR(PORTH,4)
 
 //Floppy Drives channel_floppy#:
-#define floppyStep5_1 26
-#define floppyStep5_2 28
-#define floppyStep5_3 30
-#define floppyDir5_1 27
-#define floppyDir5_2 29
-#define floppyDir5_3 31
+#define floppyStep5_1 26 //CLR(PORTA,4)
+#define floppyStep5_2 28 //CLR(PORTA,6)
+#define floppyStep5_3 30 //CLR(PORTC,7)
+#define floppyDir5_1 27 //CLR(PORTA,5)
+#define floppyDir5_2 29 //CLR(PORTA,7)
+#define floppyDir5_3 31 //CLR(PORTC,6)
 
-#define floppyStep6_1 32
-#define floppyStep6_2 34
-#define floppyStep6_3 36
-#define floppyDir6_1 33
-#define floppyDir6_2 35
-#define floppyDir6_3 37
+#define floppyStep6_1 32 //CLR(PORTC,5)
+#define floppyStep6_2 34 //CLR(PORTC,3)
+#define floppyStep6_3 36 //CLR(PORTC,1)
+#define floppyDir6_1 33 //CLR(PORTC,4)
+#define floppyDir6_2 35 //CLR(PORTC,2)
+#define floppyDir6_3 37 //CLR(PORTC,0)
 
-#define floppyStep7_1 38
-#define floppyStep7_2 40
-#define floppyStep7_3 42
-#define floppyDir7_1 39
-#define floppyDir7_2 41
-#define floppyDir7_3 43
+#define floppyStep7_1 38 //CLR(PORTD,7)
+#define floppyStep7_2 40 //CLR(PORTG,1)
+#define floppyStep7_3 42 //CLR(PORTL,7)
+#define floppyDir7_1 39 //CLR(PORTG,2)
+#define floppyDir7_2 41 //CLR(PORTG,0)
+#define floppyDir7_3 43 //CLR(PORTL,6)
 
 //Hard Drives:
 #define bassDrum 2
@@ -63,25 +64,18 @@ bool motorStallMode[] = {0, 0, 0, 0, 0, 0, 0, 0};
 bool floppyDir[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 unsigned long prevMicros[] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned long floppyEnvelope[] = {0, 0, 0, 0, 0, 0, 0, 0}; //prevMicros, but doesnt update each step
-unsigned long prevDrum[] = {0, 0, 0, 0}; //bass drum, snare drum, high drum 2, high drum
+unsigned long prevDrum[] = {0, 0, 0, 0, 0}; //bass drum, snare drum, high drum 2, high drum
 
+bool enFloppyDrum = true; //enable floppy drum
 unsigned long currentMicros = 0; //master timer
 byte controlValue1 = -1;
 byte controlValue2 = -1;
 
-byte incomingByte;
-byte midiData;
 byte midiChannel;
-byte midiVelocity;
-byte midiBendMsb;
+byte midiNote;
 byte midiBendLsb;
 byte midiControlNum;
-byte midiControlVal;
-int midiLsb;
-int midiMsb;
-byte midiNote = 0;
-int midiBendVal = 0;
-int midiAction = -1;
+byte midiAction = 0;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -95,10 +89,10 @@ void setup()
     pinMode(i, OUTPUT);
   }
   for (int i = 26; i < 54; i += 2) {
-    digitalWriteFast(i, HIGH);
+    digitalWrite(i, HIGH);
   }
   for (int i = 6; i < 13; i++) {
-    digitalWriteFast(i, HIGH);
+    digitalWrite(i, HIGH);
   }
   Serial.begin(115200); //Allows for serial MIDI communication. Comment this line when using mocaLUFA.
   cli();//stop interrupts
@@ -124,118 +118,49 @@ void setup()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ISR(TIMER2_COMPA_vect) {
-  currentMicros = micros();
-  singleStep(1);
-  singleStep(2);
-  singleStep(3);
-  singleStep(4);
-  floppySingleStep(5);
-  floppySingleStep(6);
-  floppySingleStep(7);
-  drumBass();
-  drumSnare();
-  drumHigh2();
-  drumHigh();
+  stepperMotors();
+  floppyDrives();
 }
 
-void loop()
-{
-  if (Serial.available() > 0) {
-    incomingByte = Serial.read();
-    int command = (incomingByte & 0b10000000) >> 7;
-    if (command == 1) { //status
-      midiMsb = (incomingByte & 0b11110000) >> 4;
-      midiLsb = incomingByte & 0b00001111;
-      midiChannel = midiLsb;
-    }
-    else if (command == 0) { //data
-      midiData = incomingByte;
-    }
-    if (midiMsb == 9 && midiAction == -1) { //note on
-      midiAction = 0;
-    }
-    else if (midiAction == 0) {
-      midiNote = midiData;
-      midiAction = 1;
-    }
-    else if (midiAction == 1) {
-      midiVelocity = midiData;
-      handleNoteOn(midiChannel + 1, midiNote, midiVelocity);
-      midiAction = -1;
-    }
-    if (midiMsb == 8 && midiAction == -1) { //note off
-      midiAction = 2;
-    }
-    else if (midiAction == 2) {
-      midiNote = midiData;
-      midiAction = 3;
-    }
-    else if (midiAction == 3) {
-      midiVelocity = midiData;
-      handleNoteOff(midiChannel + 1, midiNote, midiVelocity);
-      midiAction = -1;
-    }
-    if (midiMsb == 14 && midiAction == -1) { //pitch bend
-      midiAction = 4;
-    }
-    else if (midiAction == 4) { //receive bendmsb
-      midiBendLsb = midiData;
-      midiAction = 5;
-    }
-    else if (midiAction == 5) {
-      midiBendMsb = midiData;
-      midiBendVal = (midiBendMsb << 7) | midiBendLsb;
-      myPitchBend(midiChannel + 1, midiBendVal - 8192);
-      midiAction = -1;
-    }
-    if (midiMsb == 11 && midiAction == -1) {
-      midiAction = 6;
-    }
-    else if (midiAction == 6) { //control change
-      midiControlNum = midiData;
-      midiAction = 7;
-    }
-    else if(midiAction == 7) {
-      midiControlVal = midiData;
-      myControlChange(midiChannel + 1, midiControlNum, midiControlVal);
-      midiAction = -1;
-    }
-  }
+void loop() {
+  currentMicros = micros();
+  readMidi();
+  drum();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void drumBass() {
+
+void drum() {
   if (prevDrum[0] > 0) { //bass drum
     if (currentMicros - prevDrum[0] >= 2000) {
       prevDrum[0] = 0;
-      digitalWriteFast(bassDrum, LOW);
+      CLR(PORTE, 4);
     }
   }
-}
-
-void drumSnare() {
   if (prevDrum[1] > 0) { //snare drum
     if (currentMicros - prevDrum[1] >= 1250) {
       prevDrum[1] = 0;
-      digitalWriteFast(snareDrum, LOW);
+      CLR(PORTE, 5);
     }
   }
-}
-
-void drumHigh2() {
   if (prevDrum[2] > 0) { //high drum 2
     if (currentMicros - prevDrum[2] >= 1500) {
       prevDrum[2] = 0;
-      digitalWriteFast(highDrum2, LOW);
+      CLR(PORTE, 3);
     }
   }
-}
-
-void drumHigh() {
   if (prevDrum[3] > 0) { //high drum
     if (currentMicros - prevDrum[3] >= 500) {
       prevDrum[3] = 0;
-      digitalWriteFast(highDrum, LOW);
+      CLR(PORTG, 5);
+    }
+  }
+  if (prevDrum[4] > 0) {
+    if (currentMicros - prevDrum[4] >= 10000) {
+      SET(PORTL, 7);
+      SET(PORTG, 1);
+      SET(PORTD, 7);
+      prevDrum[4] = 0;
     }
   }
 }
@@ -247,16 +172,16 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
     if (channel <= 4) //Stepper Motors
     {
       if (channel == 1) {
-        digitalWriteFast(enable1, LOW);
+        CLR(PORTH, 5);
       }
       else if (channel == 2) {
-        digitalWriteFast(enable2, LOW);
+        CLR(PORTH, 6);
       }
       else if (channel == 3) {
-        digitalWriteFast(enable3, LOW);
+        CLR(PORTH, 3);
       }
       else if (channel == 4) {
-        digitalWriteFast(enable4, LOW);
+        CLR(PORTH, 4);
       }
       if (pitch == 50 || pitch == 51 || pitch == 52) {
         motorStallMode[channel] = HIGH;//The motor now intentionally "stalls" itself flag.
@@ -274,28 +199,38 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
       prevMicros[channel] = currentMicros;
     }
     else if (channel >= 5 && channel <= 7) { //Floppy Drives
-      pitchCurrent[channel] = pitchVals[pitch];
-      floppyEnvelope[channel] = currentMicros;
-      prevMicros[channel] = currentMicros;
-      origPitch[channel] = pitch;
+      if (enFloppyDrum && channel == 7) {
+        //ignore message
+      }
+      else {
+        pitchCurrent[channel] = pitchVals[pitch];
+        floppyEnvelope[channel] = currentMicros;
+        prevMicros[channel] = currentMicros;
+        origPitch[channel] = pitch;
+      }
     }
     else if (channel == 10) {
       if (pitch == 35 || pitch == 36) { //bass drum
-        digitalWriteFast(bassDrum, HIGH);
+        SET(PORTE, 4);
         prevDrum[0] = currentMicros;
       }
       else if (pitch == 38 || pitch == 40) { //snare drum
-        digitalWriteFast(snareDrum, HIGH);
+        SET(PORTE, 5);
         prevDrum[1] = currentMicros;
       }
       else if (pitch == 39 || pitch == 48 || pitch == 50 || pitch == 54 || pitch == 46 || pitch == 51
                || pitch == 59 || pitch == 49 || pitch == 57) { //high drum 2
-        digitalWriteFast(highDrum2, HIGH);
+        SET(PORTE, 3);
         prevDrum[2] = currentMicros;
       }
       else { //high drum
-        digitalWriteFast(highDrum, HIGH);
-        prevDrum[3] = currentMicros;
+        if (enFloppyDrum) {
+          floppyDrum();
+        }
+        else {
+          SET(PORTG, 5);
+          prevDrum[3] = currentMicros;
+        }
       }
     }
   }
@@ -307,40 +242,41 @@ void handleNoteOff(byte channel, byte pitch, byte velocity) //MIDI Note OFF Comm
   {
     if (origPitch[channel] == pitch) {
       pitchCurrent[channel] = -1;//Reset to -1
+      origPitch[channel] = 0;
       if (channel == 1)
       {
-        digitalWriteFast(enable1, HIGH);
+        SET(PORTH, 5);
       }
 
       else if (channel == 2)
       {
-        digitalWriteFast(enable2, HIGH);
+        SET(PORTH, 6);
       }
 
       else if (channel == 3)
       {
-        digitalWriteFast(enable3, HIGH);
+        SET(PORTH, 3);
       }
 
       else if (channel == 4)
       {
-        digitalWriteFast(enable4, HIGH);
+        SET(PORTH, 4);
       }
 
       else if (channel == 5) {
-        digitalWriteFast(floppyStep5_1, HIGH);
-        digitalWriteFast(floppyStep5_2, HIGH);
-        digitalWriteFast(floppyStep5_3, HIGH);
+        SET(PORTA, 4);
+        SET(PORTA, 6);
+        SET(PORTC, 7);
       }
       else if (channel == 6) {
-        digitalWriteFast(floppyStep6_1, HIGH);
-        digitalWriteFast(floppyStep6_2, HIGH);
-        digitalWriteFast(floppyStep6_3, HIGH);
+        SET(PORTC, 5);
+        SET(PORTC, 3);
+        SET(PORTC, 1);
       }
       else if (channel == 7) {
-        digitalWriteFast(floppyStep7_1, HIGH);
-        digitalWriteFast(floppyStep7_2, HIGH);
-        digitalWriteFast(floppyStep7_3, HIGH);
+        SET(PORTD, 7);
+        SET(PORTG, 1);
+        SET(PORTL, 7);
       }
     }
   }
@@ -348,223 +284,247 @@ void handleNoteOff(byte channel, byte pitch, byte velocity) //MIDI Note OFF Comm
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void singleStep(byte motorNum)
+void stepperMotors()
 {
-  if (pitchCurrent[motorNum] != -1 && ((currentMicros - prevMicros[motorNum]) <= pitchCurrent[motorNum]))
+  if (origPitch[1] > 0 && ((currentMicros - prevMicros[1]) <= pitchCurrent[1]))
   {
-    if (motorNum == 1)
+    CLR(PORTA, 0);
+    SET(PORTA, 0);
+    if (motorStallMode[1]) //If we're in stalled motor mode...
     {
-      digitalWriteFast(stepPin_M1, LOW);
-      digitalWriteFast(stepPin_M1, HIGH);
-      if (motorStallMode[1]) //If we're in stalled motor mode...
-      {
-        motorDirections[1] = !motorDirections[1]; //Flip the stored direction of the motor.
-        if (motorDirections[1]) {
-          digitalWriteFast(dirPin_M1, HIGH);
-        }
-        else {
-          digitalWriteFast(dirPin_M1, LOW);
-        }
+      motorDirections[1] = !motorDirections[1]; //Flip the stored direction of the motor.
+      if (motorDirections[1]) {
+        SET(PORTA, 1);
+      }
+      else {
+        CLR(PORTA, 1);
       }
     }
-    if (motorNum == 2)
+    prevMicros[1] += pitchCurrent[1] * bendFactor[1]; //Keeps track of the last time a tick occurred for the next time.
+  }
+  if (origPitch[2] > 0 && ((currentMicros - prevMicros[2]) <= pitchCurrent[2]))
+  {
+    CLR(PORTA, 2);
+    SET(PORTA, 2);
+    if (motorStallMode[2]) //If we're in stalled motor mode...
     {
-      digitalWriteFast(stepPin_M2, LOW);
-      digitalWriteFast(stepPin_M2, HIGH);
-      if (motorStallMode[2]) //If we're in stalled motor mode...
-      {
-        motorDirections[2] = !motorDirections[2]; //Flip the stored direction of the motor.
-        if (motorDirections[2]) {
-          digitalWriteFast(dirPin_M2, HIGH);
-        }
-        else {
-          digitalWriteFast(dirPin_M2, LOW);
-        }
+      motorDirections[2] = !motorDirections[2]; //Flip the stored direction of the motor.
+      if (motorDirections[2]) {
+        SET(PORTA, 3);
+      }
+      else {
+        CLR(PORTA, 3);
       }
     }
-    if (motorNum == 3)
+    prevMicros[2] += pitchCurrent[2] * bendFactor[2]; //Keeps track of the last time a tick occurred for the next time.
+  }
+  if (origPitch[3] > 0 && ((currentMicros - prevMicros[3]) <= pitchCurrent[3]))
+  {
+    CLR(PORTL, 5);
+    SET(PORTL, 5);
+    if (motorStallMode[3]) //If we're in stalled motor mode...
     {
-      digitalWriteFast(stepPin_M3, LOW);
-      digitalWriteFast(stepPin_M3, HIGH);
-      if (motorStallMode[3]) //If we're in stalled motor mode...
-      {
-        motorDirections[3] = !motorDirections[3]; //Flip the stored direction of the motor.
-        if (motorDirections[3]) {
-          digitalWriteFast(dirPin_M3, HIGH);
-        }
-        else {
-          digitalWriteFast(dirPin_M3, LOW);
-        }
+      motorDirections[3] = !motorDirections[3]; //Flip the stored direction of the motor.
+      if (motorDirections[3]) {
+        SET(PORTL, 4);
+      }
+      else {
+        CLR(PORTL, 4);
       }
     }
-    if (motorNum == 4)
+    prevMicros[3] += pitchCurrent[3] * bendFactor[3]; //Keeps track of the last time a tick occurred for the next time.
+  }
+  if (origPitch[4] > 0 && ((currentMicros - prevMicros[4]) <= pitchCurrent[4]))
+  {
+    CLR(PORTL, 3);
+    SET(PORTL, 3);
+    if (motorStallMode[4]) //If we're in stalled motor mode...
     {
-      digitalWriteFast(stepPin_M4, LOW);
-      digitalWriteFast(stepPin_M4, HIGH);
-      if (motorStallMode[4]) //If we're in stalled motor mode...
-      {
-        motorDirections[4] = !motorDirections[4]; //Flip the stored direction of the motor.
-        if (motorDirections[4]) {
-          digitalWriteFast(dirPin_M4, HIGH);
-        }
-        else {
-          digitalWriteFast(dirPin_M4, LOW);
-        }
+      motorDirections[4] = !motorDirections[4]; //Flip the stored direction of the motor.
+      if (motorDirections[4]) {
+        SET(PORTL, 2);
+      }
+      else {
+        CLR(PORTL, 2);
       }
     }
-    prevMicros[motorNum] += pitchCurrent[motorNum] * bendFactor[motorNum]; //Keeps track of the last time a tick occurred for the next time.
+    prevMicros[4] += pitchCurrent[4] * bendFactor[4]; //Keeps track of the last time a tick occurred for the next time.
   }
 }
 
-void floppySingleStep(byte channel) {
-  if (pitchCurrent[channel] != -1 && ((currentMicros - prevMicros[channel]) <= pitchCurrent[channel])) {
-    if (channel == 5) {
-      floppy(0);
-      if (currentMicros - floppyEnvelope[channel] >= attack && currentMicros - floppyEnvelope[channel] <= sustain) {
-        floppy(1);
-        if (currentMicros - floppyEnvelope[channel] >= attack + attackOffset && currentMicros - floppyEnvelope[channel] <= sustain - sustainOffset) {
-          floppy(2);
-        }
-        else {
-          digitalWriteFast(floppyStep5_3, HIGH);
-        }
-      } else {
-        digitalWriteFast(floppyStep5_2, HIGH);
+void floppyDrives() {
+  if (origPitch[5] > 0 && ((currentMicros - prevMicros[5]) <= pitchCurrent[5])) {
+    step5_1();
+    if (currentMicros - floppyEnvelope[5] >= attack && currentMicros - floppyEnvelope[5] <= sustain) {
+      step5_2();
+      if (currentMicros - floppyEnvelope[5] >= attack + attackOffset && currentMicros - floppyEnvelope[5] <= sustain - sustainOffset) {
+        step5_3();
       }
-    }
-    else if (channel == 6) {
-      floppy(3);
-      if (currentMicros - floppyEnvelope[channel] >= attack && currentMicros - floppyEnvelope[channel] <= sustain) {
-        floppy(4);
-        if (currentMicros - floppyEnvelope[channel] >= attack + attackOffset && currentMicros - floppyEnvelope[channel] <= sustain - sustainOffset) {
-          floppy(5);
-        }
-        else {
-          digitalWriteFast(floppyStep6_3, HIGH);
-        }
-      } else {
-        digitalWriteFast(floppyStep6_2, HIGH);
+      else {
+        SET(PORTC, 7);
       }
+    } else {
+      SET(PORTA, 6);
     }
-    else if (channel == 7) {
-      floppy(6);
-      if (currentMicros - floppyEnvelope[channel] >= attack && currentMicros - floppyEnvelope[channel] <= sustain) {
-        floppy(7);
-        if (currentMicros - floppyEnvelope[channel] >= attack + attackOffset && currentMicros - floppyEnvelope[channel] <= sustain - sustainOffset) {
-          floppy(8);
-        }
-        else {
-          digitalWriteFast(floppyStep7_3, HIGH);
-        }
-      } else {
-        digitalWriteFast(floppyStep7_2, HIGH);
+    prevMicros[5] += pitchCurrent[5] * bendFactor[5];
+  }
+  if (origPitch[6] > 0 && ((currentMicros - prevMicros[6]) <= pitchCurrent[6])) {
+    step6_1();
+    if (currentMicros - floppyEnvelope[6] >= attack && currentMicros - floppyEnvelope[6] <= sustain) {
+      step6_2();
+      if (currentMicros - floppyEnvelope[6] >= attack + attackOffset && currentMicros - floppyEnvelope[6] <= sustain - sustainOffset) {
+        step6_3();
       }
+      else {
+        SET(PORTC, 1);
+      }
+    } else {
+      SET(PORTC, 3);
     }
-    prevMicros[channel] += pitchCurrent[channel] * bendFactor[channel];
+    prevMicros[6] += pitchCurrent[6] * bendFactor[6];
+  }
+  if (origPitch[7] > 0 && ((currentMicros - prevMicros[7]) <= pitchCurrent[7])) {
+    step7_1();
+    if (currentMicros - floppyEnvelope[7] >= attack && currentMicros - floppyEnvelope[7] <= sustain) {
+      step7_2();
+      if (currentMicros - floppyEnvelope[7] >= attack + attackOffset && currentMicros - floppyEnvelope[7] <= sustain - sustainOffset) {
+        step7_3();
+      }
+      else {
+        SET(PORTL, 7);
+      }
+    } else {
+      SET(PORTG, 1);
+    }
+    prevMicros[7] += pitchCurrent[7] * bendFactor[7];
   }
 }
 
+void step5_1() {
+  SET(PORTA, 4);
+  CLR(PORTA, 4);
+  floppyDir[0] = !floppyDir[0];
+  if (floppyDir[0]) {
+    SET(PORTA, 5);
+  }
+  else {
+    CLR(PORTA, 5);
+  }
+}
 
-void floppy(byte index) {
-  if (index == 0) { //channel 5
-    digitalWriteFast(floppyStep5_1, HIGH);
-    digitalWriteFast(floppyStep5_1, LOW);
-    floppyDir[0] = !floppyDir[0];
-    if (floppyDir[0]) {
-      digitalWriteFast(floppyDir5_1, HIGH);
-    }
-    else {
-      digitalWriteFast(floppyDir5_1, LOW);
-    }
+void step5_2() {
+  SET(PORTA, 6);
+  CLR(PORTA, 6);
+  floppyDir[1] = !floppyDir[1];
+  if (floppyDir[1]) {
+    SET(PORTA, 7);
   }
-  else if (index == 1) { //channel 5
-    digitalWriteFast(floppyStep5_2, HIGH);
-    digitalWriteFast(floppyStep5_2, LOW);
-    floppyDir[1] = !floppyDir[1];
-    if (floppyDir[1]) {
-      digitalWriteFast(floppyDir5_2, HIGH);
-    }
-    else {
-      digitalWriteFast(floppyDir5_2, LOW);
-    }
+  else {
+    CLR(PORTA, 7);
   }
-  else if (index == 2) { //channel 5
-    digitalWriteFast(floppyStep5_3, HIGH);
-    digitalWriteFast(floppyStep5_3, LOW);
-    floppyDir[2] = !floppyDir[2];
-    if (floppyDir[2]) {
-      digitalWriteFast(floppyDir5_3, HIGH);
-    }
-    else {
-      digitalWriteFast(floppyDir5_3, LOW);
-    }
+}
+
+void step5_3() {
+  SET(PORTC, 7);
+  CLR(PORTC, 7);
+  floppyDir[2] = !floppyDir[2];
+  if (floppyDir[2]) {
+    SET(PORTC, 6);
   }
-  else if (index == 3) { //channel 6
-    digitalWriteFast(floppyStep6_1, HIGH);
-    digitalWriteFast(floppyStep6_1, LOW);
-    floppyDir[3] = !floppyDir[3];
-    if (floppyDir[3]) {
-      digitalWriteFast(floppyDir6_1, HIGH);
-    }
-    else {
-      digitalWriteFast(floppyDir6_1, LOW);
-    }
+  else {
+    CLR(PORTC, 6);
   }
-  else if (index == 4) { //channel 6
-    digitalWriteFast(floppyStep6_2, HIGH);
-    digitalWriteFast(floppyStep6_2, LOW);
-    floppyDir[4] = !floppyDir[4];
-    if (floppyDir[4]) {
-      digitalWriteFast(floppyDir6_2, HIGH);
-    }
-    else {
-      digitalWriteFast(floppyDir6_2, LOW);
-    }
+}
+
+void step6_1() {
+  SET(PORTC, 5);
+  CLR(PORTC, 5);
+  floppyDir[3] = !floppyDir[3];
+  if (floppyDir[3]) {
+    SET(PORTC, 4);
   }
-  else if (index == 5) { //channel 6
-    digitalWriteFast(floppyStep6_3, HIGH);
-    digitalWriteFast(floppyStep6_3, LOW);
-    floppyDir[5] = !floppyDir[5];
-    if (floppyDir[5]) {
-      digitalWriteFast(floppyDir6_3, HIGH);
-    }
-    else {
-      digitalWriteFast(floppyDir6_3, LOW);
-    }
+  else {
+    CLR(PORTC, 4);
   }
-  else if (index == 6) { //channel 7
-    digitalWriteFast(floppyStep7_1, HIGH);
-    digitalWriteFast(floppyStep7_1, LOW);
-    floppyDir[6] = !floppyDir[6];
-    if (floppyDir[6]) {
-      digitalWriteFast(floppyDir7_1, HIGH);
-    }
-    else {
-      digitalWriteFast(floppyDir7_1, LOW);
-    }
+}
+
+void step6_2() {
+  SET(PORTC, 3);
+  CLR(PORTC, 3);
+  floppyDir[4] = !floppyDir[4];
+  if (floppyDir[4]) {
+    SET(PORTC, 2);
   }
-  else if (index == 7) { //channel 7
-    digitalWriteFast(floppyStep7_2, HIGH);
-    digitalWriteFast(floppyStep7_2, LOW);
-    floppyDir[7] = !floppyDir[7];
-    if (floppyDir[7]) {
-      digitalWriteFast(floppyDir7_2, HIGH);
-    }
-    else {
-      digitalWriteFast(floppyDir7_2, LOW);
-    }
+  else {
+    CLR(PORTC, 2);
   }
-  else if (index == 8) { //channel 7
-    digitalWriteFast(floppyStep7_3, HIGH);
-    digitalWriteFast(floppyStep7_3, LOW);
-    floppyDir[8] = !floppyDir[8];
-    if (floppyDir[8]) {
-      digitalWriteFast(floppyDir7_3, HIGH);
-    }
-    else {
-      digitalWriteFast(floppyDir7_3, LOW);
-    }
+}
+
+void step6_3() {
+  SET(PORTC, 1);
+  CLR(PORTC, 1);
+  floppyDir[5] = !floppyDir[5];
+  if (floppyDir[5]) {
+    SET(PORTC, 0);
   }
+  else {
+    CLR(PORTC, 0);
+  }
+}
+
+void step7_1() {
+  SET(PORTD, 7);
+  CLR(PORTD, 7);
+  floppyDir[6] = !floppyDir[6];
+  if (floppyDir[6]) {
+    SET(PORTG, 2);
+  }
+  else {
+    CLR(PORTG, 2);
+  }
+}
+
+void step7_2() {
+  SET(PORTG, 1);
+  CLR(PORTG, 1);
+  floppyDir[7] = !floppyDir[7];
+  if (floppyDir[7]) {
+    SET(PORTG, 0);
+  }
+  else {
+    CLR(PORTG, 0);
+  }
+}
+
+void step7_3() {
+  SET(PORTL, 7);
+  CLR(PORTL, 7);
+  floppyDir[8] = !floppyDir[8];
+  if (floppyDir[8]) {
+    SET(PORTL, 6);
+  }
+  else {
+    SET(PORTG, 0);
+    SET(PORTG, 0);
+  }
+}
+
+void floppyDrum() {
+  CLR(PORTL, 7);
+  CLR(PORTG, 1);
+  CLR(PORTD, 7);
+  floppyDir[8] = !floppyDir[8];
+  if (floppyDir[8]) {
+    SET(PORTL, 6);
+    SET(PORTG, 2);
+    SET(PORTC, 0);
+  }
+  else {
+    CLR(PORTL, 6);
+    CLR(PORTG, 2);
+    CLR(PORTC, 0);
+  }
+  prevDrum[4] = currentMicros;
 }
 
 void myPitchBend(byte channel, int bend) {
@@ -608,10 +568,10 @@ void resetAll() {
     pitchCurrent[i] = -1;
   }
   for (int i = 26; i < 54; i += 2) {
-    digitalWriteFast(i, HIGH);
+    digitalWrite(i, HIGH);
   }
   for (int i = 6; i < 13; i++) {
-    digitalWriteFast(i, HIGH);
+    digitalWrite(i, HIGH);
   }
 }
 
@@ -620,9 +580,67 @@ void mute() {
     pitchCurrent[i] = -1;
   }
   for (int i = 26; i < 54; i += 2) {
-    digitalWriteFast(i, HIGH);
+    digitalWrite(i, HIGH);
   }
   for (int i = 6; i < 13; i++) {
-    digitalWriteFast(i, HIGH);
+    digitalWrite(i, HIGH);
+  }
+}
+
+void readMidi() {
+  if (Serial.available() > 0) {
+    byte incomingByte = Serial.read();
+    byte command = (incomingByte & 0b10000000) >> 7;
+    if (command == 1) { //status
+      byte midiMsb = (incomingByte & 0b11110000) >> 4; //msb
+      midiChannel = (incomingByte & 0b00001111) + 1; //lsb
+      if (midiMsb == 9) { //note on
+        midiAction = 1;
+      }
+      else if (midiMsb == 8) { //note off
+        midiAction = 3;
+      }
+      else if (midiMsb == 14) { //pitch bend
+        midiAction = 5;
+      }
+      else if (midiMsb == 11) { //control change
+        midiAction = 7;
+      }
+    }
+    else {
+      if (midiAction == 1) {
+        midiNote = incomingByte;
+        midiAction = 2;
+      }
+      else if (midiAction == 2) {
+        handleNoteOn(midiChannel, midiNote, incomingByte);
+        midiAction = 0;
+      }
+      else if (midiAction == 3) {
+        midiNote = incomingByte;
+        midiAction = 4;
+      }
+      else if (midiAction == 4) {
+        handleNoteOff(midiChannel, midiNote, incomingByte);
+        midiAction = 0;
+      }
+      else if (midiAction == 5) { //receive bendmsb
+        midiBendLsb = incomingByte;
+        midiAction = 6;
+      }
+      else if (midiAction == 6) {
+        int midiBendVal = (incomingByte << 7) | midiBendLsb;
+        myPitchBend(midiChannel, midiBendVal - 8192);
+        midiAction = 0;
+      }
+      else if (midiAction == 7) {
+        midiControlNum = incomingByte;
+        midiAction = 8;
+      }
+      else if (midiAction == 8) {
+        myControlChange(midiChannel, midiControlNum, incomingByte);
+        midiAction = 0;
+      }
+    }
   }
 }
