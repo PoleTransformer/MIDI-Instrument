@@ -574,11 +574,44 @@ void floppyDrum() {
 
 void myPitchBend(byte channel, int bend) {
   if (channel > 0 && channel <= maxChannel) {
-    float bendF = bend * -1;
-    bendF /= 8192;
-    bendF *= bendSens[channel];
-    bendF /= 12;
-    bendFactor[channel] = pow(2, bendF);
+    byte bendRange = bendSens[channel];
+    int bendVal = map(bend, -8192, 8191, 0, 127);
+    if (bendRange == 1) {
+      bendFactor[channel] = bendVal1[bendVal];
+    }
+    else if (bendRange == 2) {
+      bendFactor[channel] = bendVal2[bendVal];
+    }
+    else if (bendRange == 3) {
+      bendFactor[channel] = bendVal3[bendVal];
+    }
+    else if (bendRange == 4) {
+      bendFactor[channel] = bendVal4[bendVal];
+    }
+    else if (bendRange == 5) {
+      bendFactor[channel] = bendVal5[bendVal];
+    }
+    else if (bendRange == 6) {
+      bendFactor[channel] = bendVal6[bendVal];
+    }
+    else if (bendRange == 7) {
+      bendFactor[channel] = bendVal7[bendVal];
+    }
+    else if (bendRange == 8) {
+      bendFactor[channel] = bendVal8[bendVal];
+    }
+    else if (bendRange == 9) {
+      bendFactor[channel] = bendVal9[bendVal];
+    }
+    else if (bendRange == 10) {
+      bendFactor[channel] = bendVal10[bendVal];
+    }
+    else if (bendRange == 11) {
+      bendFactor[channel] = bendVal11[bendVal];
+    }
+    else if (bendRange == 12) {
+      bendFactor[channel] = bendVal12[bendVal];
+    }
   }
 }
 
@@ -675,7 +708,7 @@ void readMidi() {
       }
       else if (midiAction == 6) {
         int midiBendVal = (incomingByte << 7) | midiBendLsb;
-        myPitchBend(midiChannel, midiBendVal - 8192);
+        myPitchBend(midiChannel, (midiBendVal - 8192) * -1);
         midiAction = 0;
       }
       else if (midiAction == 7) {
