@@ -1,2 +1,2 @@
 # MIDI-Instrument
-A MIDI project that uses an Arduino Mega, stepper motors, floppy drives, and hard drives to create music. Unfortunately, the mega is too slow and the pitch drifts with time. I am currently working on an spi link between 2 arduinos to reduce the workload on the mega.
+A MIDI project that uses an Arduino Mega, stepper motors, floppy drives, and hard drives to create music. There is an annoying bug, which is the pitch will sound flatter over time. Initially everything sounds good, but with time the pitch drifts off. Ive tried days to solve this issue and even used timer 2, but the problem persists. If anyone can contribute some ideas, that would be great.
