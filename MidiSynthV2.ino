@@ -82,19 +82,64 @@ byte midiAction = 0;
 
 void setup()
 {
+  Serial.begin(115200); //Allows for serial MIDI communication. Comment this line when using mocaLUFA.
   for (int i = 2; i < 14; i++) {
     pinMode(i, OUTPUT);
   }
   for (int i = 22; i < 54; i++) {
     pinMode(i, OUTPUT);
   }
-  for (int i = 26; i < 54; i += 2) {
-    digitalWrite(i, HIGH);
-  }
   for (int i = 6; i < 13; i++) {
     digitalWrite(i, HIGH);
   }
-  Serial.begin(115200); //Allows for serial MIDI communication. Comment this line when using mocaLUFA.
+  for (int i = 0; i < 70; i++) {
+    SET(PORTA, 4);
+    SET(PORTA, 6);
+    SET(PORTC, 7);
+    SET(PORTC, 5);
+    SET(PORTC, 3);
+    SET(PORTC, 1);
+    SET(PORTD, 7);
+    SET(PORTG, 1);
+    SET(PORTL, 7);
+    CLR(PORTA, 4);
+    CLR(PORTA, 6);
+    CLR(PORTC, 7);
+    CLR(PORTC, 5);
+    CLR(PORTC, 3);
+    CLR(PORTC, 1);
+    CLR(PORTD, 7);
+    CLR(PORTG, 1);
+    CLR(PORTL, 7);
+    delay(5);
+  }
+  for (int i = 26; i < 54; i++) {
+    digitalWrite(i, HIGH);
+  }
+  for (int i = 0; i < 35; i++) {
+    SET(PORTA, 4);
+    SET(PORTA, 6);
+    SET(PORTC, 7);
+    SET(PORTC, 5);
+    SET(PORTC, 3);
+    SET(PORTC, 1);
+    SET(PORTD, 7);
+    SET(PORTG, 1);
+    SET(PORTL, 7);
+    CLR(PORTA, 4);
+    CLR(PORTA, 6);
+    CLR(PORTC, 7);
+    CLR(PORTC, 5);
+    CLR(PORTC, 3);
+    CLR(PORTC, 1);
+    CLR(PORTD, 7);
+    CLR(PORTG, 1);
+    CLR(PORTL, 7);
+    delay(5);
+  }
+  for (int i = 26; i < 54; i++) {
+    digitalWrite(i, HIGH);
+  }
   cli();//stop interrupts
 
   //set timer2 interrupt every 128us
