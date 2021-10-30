@@ -1,4 +1,4 @@
-//Floppy and HDD Arduino
+//Floppy Arduino
 #include <TimerOne.h>
 #include "pitches.h"
 #define CLR(x,y) (x&=(~_BV(y)))
@@ -41,8 +41,8 @@ unsigned int currentTick[] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned int originalPeriod[] = {0, 0, 0, 0, 0, 0, 0, 0};
 float bendFactor[] = {1, 1, 1, 1, 1, 1, 1, 1};
 bool currentState[] = {0, 0, 0, 0, 0, 0, 0, 0};
-byte stepCount[] = {0, 0, 0, 0, 0, 0, 0, 0};
 bool floppyDir[] = {0, 0, 0, 0, 0, 0, 0, 0};
+byte stepCount[] = {0, 0, 0, 0, 0, 0, 0, 0};
 byte bendSens[] = {2, 2, 2, 2, 2, 2, 2, 2};
 unsigned long floppyEnvelope[] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned long prevDrum[] = {0, 0, 0, 0, 0}; //bass drum, snare drum, high drum 2, high drum
@@ -120,16 +120,10 @@ void setup()
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 void loop() {
   readMIDI();
   drum();
 }
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void drum() {
   unsigned long currentMicros = micros();
@@ -167,7 +161,7 @@ void drum() {
   }
 }
 
-void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Command
+void handleNoteOn(byte channel, byte pitch, byte velocity)
 {
   if (channel >= 5 && channel <= 10 && velocity > 0) {
     unsigned long currentMicros = micros();
@@ -207,7 +201,7 @@ void handleNoteOn(byte channel, byte pitch, byte velocity) //MIDI Note ON Comman
   }
 }
 
-void handleNoteOff(byte channel, byte pitch, byte velocity) //MIDI Note OFF Command
+void handleNoteOff(byte channel, byte pitch, byte velocity)
 {
   if (channel >= 5 && channel <= 7)
   {
@@ -232,9 +226,7 @@ void handleNoteOff(byte channel, byte pitch, byte velocity) //MIDI Note OFF Comm
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void tick() {
+void tick() { //function to pulse floppy drives
   for (int i = 5; i < 8; i++) {
     if (currentPeriod[i] > 0) {
       currentTick[i]++;
@@ -268,28 +260,28 @@ void togglePin(byte i) {
   else {
     if (i == 5) {
       CLR(PORTA, 4); //floppy 1
-      if (currentMicros - floppyEnvelope[i] >= 10000 && currentMicros - floppyEnvelope[i] <= 200000) {
+      if (currentMicros - floppyEnvelope[i] >= 10000 && currentMicros - floppyEnvelope[i] <= 200000) { //envelope simulation
         CLR(PORTA, 6); //floppy 2
       }
-      if (currentMicros - floppyEnvelope[i] >= 20000 && currentMicros - floppyEnvelope[i] <= 100000) {
+      if (currentMicros - floppyEnvelope[i] >= 20000 && currentMicros - floppyEnvelope[i] <= 100000) { //envelope simulation
         CLR(PORTC, 7); //floppy 2
       }
     }
     if (i == 6) {
       CLR(PORTA, 2); //floppy 1
-      if (currentMicros - floppyEnvelope[i] >= 10000 && currentMicros - floppyEnvelope[i] <= 200000) {
+      if (currentMicros - floppyEnvelope[i] >= 10000 && currentMicros - floppyEnvelope[i] <= 200000) { //envelope simulation
         CLR(PORTC, 3); //floppy 2
       }
-      if (currentMicros - floppyEnvelope[i] >= 20000 && currentMicros - floppyEnvelope[i] <= 100000) {
+      if (currentMicros - floppyEnvelope[i] >= 20000 && currentMicros - floppyEnvelope[i] <= 100000) { //envelope simulation
         CLR(PORTC, 1); //floppy 3
       }
     }
     if (i == 7) {
       CLR(PORTD, 7); //floppy 1
-      if (currentMicros - floppyEnvelope[i] >= 10000 && currentMicros - floppyEnvelope[i] <= 200000) {
+      if (currentMicros - floppyEnvelope[i] >= 10000 && currentMicros - floppyEnvelope[i] <= 200000) { //envelope simulation
         CLR(PORTG, 1); //floppy 2
       }
-      if (currentMicros - floppyEnvelope[i] >= 20000 && currentMicros - floppyEnvelope[i] <= 100000) {
+      if (currentMicros - floppyEnvelope[i] >= 20000 && currentMicros - floppyEnvelope[i] <= 100000) { //envelope simulation
         CLR(PORTL, 7); //floppy 3
       }
     }

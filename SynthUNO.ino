@@ -33,7 +33,7 @@ void setup() {
   for (int i = 2; i < 14; i++) {
     pinMode(i, OUTPUT);
   }
-  Serial.begin(115200); //Allows for serial MIDI communication.
+  Serial.begin(115200); //Receive MIDI from Floppy Arduino
 }
 
 
@@ -41,7 +41,7 @@ void loop() {
   readMIDI();
 }
 
-void tick() {
+void tick() { //function to pulse stepper motors
   for (int i = 1; i < 5; i++) {
     if (currentPeriod[i] > 0) {
       currentTick[i]++;
