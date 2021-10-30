@@ -36,7 +36,6 @@ void setup() {
   Serial.begin(115200); //Receive MIDI from Floppy Arduino
 }
 
-
 void loop() {
   readMIDI();
 }
