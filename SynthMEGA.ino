@@ -131,7 +131,7 @@ void drum() {
     }
   }
   if (prevDrum[1] > 0) { //snare drum
-    if (currentMicros - prevDrum[1] >= 1250) {
+    if (currentMicros - prevDrum[1] >= 6000) {
       prevDrum[1] = 0;
       CLR(PORTE, 5);
     }
@@ -167,7 +167,8 @@ void handleNoteOn(byte channel, byte pitch, byte velocity)
         //ignore message
       }
       else {
-        currentPeriod[channel] = originalPeriod[channel] = pitchVals[pitch] / (timerResolution * 2);
+        originalPeriod[channel] = pitchVals[pitch] / (timerResolution * 2);
+        currentPeriod[channel] = originalPeriod[channel] * bendFactor[channel];
         floppyEnvelope[channel] = currentMicros;
       }
     }
@@ -349,7 +350,8 @@ void myPitchBend(byte channel, int bend) {
     bendF /= 8192;
     bendF *= bendSens[channel];
     bendF /= 12;
-    currentPeriod[channel] = originalPeriod[channel] * pow(2, bendF);
+    bendFactor[channel] = pow(2, bendF);
+    currentPeriod[channel] = originalPeriod[channel] * bendFactor[channel];
   }
 }
 

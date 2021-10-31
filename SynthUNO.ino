@@ -108,7 +108,8 @@ void readMIDI() {
 
 void handleNoteOn(byte channel, byte pitch, byte velocity) {
   if (channel > 0 && channel < 5 && velocity > 0) {
-    currentPeriod[channel] = originalPeriod[channel] = pitchVals[pitch] / (timerResolution * 2);
+    originalPeriod[channel] = pitchVals[pitch] / (timerResolution * 2);
+    currentPeriod[channel] = originalPeriod[channel] * bendFactor[channel];
   }
 }
 
@@ -126,7 +127,8 @@ void handlePitchBend(byte channel, int bend) {
     bendF /= 8192;
     bendF *= bendSens[channel];
     bendF /= 12;
-    currentPeriod[channel] = originalPeriod[channel] * pow(2, bendF);
+    bendFactor[channel] = pow(2, bendF);
+    currentPeriod[channel] = originalPeriod[channel] * bendFactor[channel];
   }
 }
 
