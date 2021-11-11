@@ -6,11 +6,12 @@
 #define timerResolution 80000 //vibrato
 
 unsigned long prevMicros[] = {0, 0, 0, 0, 0};
+unsigned int period[] = {0, 0, 0, 0, 0};
 byte originalPitch[] = {0, 0, 0, 0, 0};
 byte bendSens[] = {2, 2, 2, 2, 2};
-float period[] = {0, 0, 0, 0, 0};
 float bendFactor[] = {1, 1, 1, 1, 1};
 float originalBend[] = {1, 1, 1, 1, 1};
+float maxVibrato[] = {0, 0, 0, 0, 0};
 bool enableVibrato[] = {0, 0, 0, 0, 0};
 bool vibratoState[] = {0, 0, 0, 0, 0};
 byte controlVal1 = -1;
@@ -37,10 +38,10 @@ void vibrato() {
   for (int i = 1; i < 5; i++) {
     if (enableVibrato[i]) {
       if (vibratoState[i]) {
-        bendFactor[i] = originalBend[i] + 0.03;
+        bendFactor[i] = originalBend[i] + maxVibrato[i];
       }
       else {
-        bendFactor[i] = originalBend[i] - 0.03;
+        bendFactor[i] = originalBend[i] - maxVibrato[i];
       }
       calculatePeriod(i);
       vibratoState[i] = !vibratoState[i];
@@ -98,7 +99,14 @@ void handlePitchBend(byte channel, int bend) {
 void handleControlChange(byte channel, byte firstByte, byte secondByte) {
   if (firstByte == 1) { //modulation wheel
     if (secondByte > 0) {
+      float valF = secondByte;
       enableVibrato[channel] = true;
+      if (secondByte > 64) {
+        maxVibrato[channel] = 0.03;
+      }
+      else {
+        maxVibrato[channel] = 0.02;
+      }
     }
     else {
       enableVibrato[channel] = false;
@@ -129,6 +137,7 @@ void resetAll() {
   for (int i = 0; i < 5; i++) {
     originalPitch[i] = 0;
     period[i] = 0;
+    enableVibrato[i] = 0;
     bendFactor[i] = 1;
     bendSens[i] = 2;
   }
@@ -143,7 +152,7 @@ void mute() {
 
 void calculatePeriod(byte channel) {
   if (originalPitch[channel] > 0) {
-    period[channel] = ((1 / pitchVals[originalPitch[channel]]) * bendFactor[channel]) * 1000000;
+    period[channel] = pitchVals[originalPitch[channel]] * bendFactor[channel];
   }
 }
 
