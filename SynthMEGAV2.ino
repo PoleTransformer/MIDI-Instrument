@@ -277,7 +277,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
       }
     }
   }
-  else if (channel == 10) {
+  else if (channel == 10 && velocity > 0) {
     if (note == 35 || note == 36) { //bass drum
       SET(PORTE, 4);
       if (velocity > 119) {
