@@ -72,9 +72,14 @@ void stepperMotors(byte channel) {
 }
 
 void handleNoteOn(byte channel, byte note, byte velocity) {
-  originalPitch[channel] = note;
-  prevMicros[channel] = micros();
-  calculatePeriod(channel);
+  if (velocity == 0) {
+    handleNoteOff(channel, note, velocity);
+  }
+  else {
+    originalPitch[channel] = note;
+    prevMicros[channel] = micros();
+    calculatePeriod(channel);
+  }
 }
 
 void handleNoteOff(byte channel, byte note, byte velocity) {

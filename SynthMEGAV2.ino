@@ -262,7 +262,10 @@ void drum() {
 
 void handleNoteOn(byte channel, byte note, byte velocity) {
   if (channel > 4 && channel < 8) {
-    if (note < 71) {
+    if(velocity == 0) {
+      handleNoteOff(channel, note, velocity);
+    }
+    else if (note < 71) {
       if (floppyDrum && channel == 7) {
         //ignore message
       }
@@ -527,7 +530,7 @@ void readMIDI() {
         midiAction = 2;
       }
       else if (midiAction == 2) { //velocity
-        if (offsetChannel > 0 && offsetChannel < 5 && incomingByte > 0) {
+        if (offsetChannel > 0 && offsetChannel < 5) {
           Serial1.write('1');
           Serial1.write(offsetChannel);
           Serial1.write(midiNote);
