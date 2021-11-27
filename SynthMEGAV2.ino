@@ -34,7 +34,7 @@
 
 //MIDI Configuration:
 #define timerResolution 80000 //vibrato
-bool floppyDrum = true; //enable floppy drum channel 7
+bool floppyDrum = false; //enable floppy drum channel 7
 
 unsigned int period[] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned long prevMicros[] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -49,6 +49,7 @@ float maxVibrato[] = {0, 0, 0, 0, 0, 0, 0, 0};
 bool enableVibrato[] = {0, 0, 0, 0, 0, 0, 0, 0};
 bool vibratoState[] = {0, 0, 0, 0, 0, 0, 0, 0};
 bool floppyDir[] = {0, 0, 0, 0, 0, 0, 0, 0};
+bool bendFlag[] = {0, 0, 0, 0, 0, 0, 0, 0};
 byte controlVal1 = -1;
 byte controlVal2 = -1;
 
@@ -84,7 +85,7 @@ void floppyDrives(byte channel) {
   if (period[channel] > 0 && micros() - prevMicros[channel] >= period[channel]) {
     if (channel == 5) {
       toggleFloppy(0);
-      if (micros() - floppyEnvelope[5] >= 10000 && micros() - floppyEnvelope[5] <= 200000) {
+      if (bendFlag[5] || micros() - floppyEnvelope[5] >= 10000 && micros() - floppyEnvelope[5] <= 200000) {
         toggleFloppy(1);
       }
       else {
@@ -99,7 +100,7 @@ void floppyDrives(byte channel) {
     }
     if (channel == 6) {
       toggleFloppy(3);
-      if (micros() - floppyEnvelope[6] >= 10000 && micros() - floppyEnvelope[6] <= 200000) {
+      if (bendFlag[6] || micros() - floppyEnvelope[6] >= 10000 && micros() - floppyEnvelope[6] <= 200000) {
         toggleFloppy(4);
       }
       else {
@@ -114,7 +115,7 @@ void floppyDrives(byte channel) {
     }
     if (channel == 7) {
       toggleFloppy(6);
-      if (micros() - floppyEnvelope[7] >= 10000 && micros() - floppyEnvelope[7] <= 200000) {
+      if (bendFlag[7] || micros() - floppyEnvelope[7] >= 10000 && micros() - floppyEnvelope[7] <= 200000) {
         toggleFloppy(7);
       }
       else {
@@ -325,7 +326,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
       }
       else {
         SET(PORTG, 5);
-        drumDuration[3] = 500;
+        drumDuration[3] = 300;
         prevDrum[3] = micros();
       }
     }
@@ -364,6 +365,12 @@ void handlePitchBend(byte channel, int bend) {
     }
     else if (bendSens[channel] == 12) {
       bendFactor[channel] = bendVal12[mapped];
+    }
+    if(bend > 2048 && bend < 6144 || bend < -2048 && bend > -6144) {
+      bendFlag[channel] = true;
+    }
+    else {
+      bendFlag[channel] = false;
     }
     originalBend[channel] = bendFactor[channel];
     calculatePeriod(channel);
@@ -482,6 +489,7 @@ void resetAll() {
     originalPitch[i] = 0;
     period[i] = 0;
     enableVibrato[i] = 0;
+    bendFlag[i] = 0;
     bendFactor[i] = 1;
     bendSens[i] = 2;
   }
