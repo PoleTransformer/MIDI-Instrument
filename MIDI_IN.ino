@@ -54,35 +54,33 @@ void readMIDI() {
         midiAction = 2;
       }
       else if (midiAction == 2) { //velocity
-        if (offsetChannel > 0 && offsetChannel < 5) {
-          handleNoteOn(offsetChannel, midiNote, incomingByte);
-          midiAction = 0;
-        }
-        else if (midiAction == 3) {
-          midiNote = incomingByte;
-          midiAction = 4;
-        }
-        else if (midiAction == 4) {
-          handleNoteOff(offsetChannel, midiNote, incomingByte);
-          midiAction = 0;
-        }
-        else if (midiAction == 5) { //receive bendmsb
-          midiBendLsb = incomingByte;
-          midiAction = 6;
-        }
-        else if (midiAction == 6) {
-          int midiBendVal = (incomingByte << 7) | midiBendLsb;
-          handlePitchBend(offsetChannel, (midiBendVal - 8192) * -1);
-          midiAction = 0;
-        }
-        else if (midiAction == 7) {
-          midiControlNum = incomingByte;
-          midiAction = 8;
-        }
-        else if (midiAction == 8) {
-          handleControlChange(offsetChannel, midiControlNum, incomingByte);
-          midiAction = 0;
-        }
+        handleNoteOn(offsetChannel, midiNote, incomingByte);
+        midiAction = 0;
+      }
+      else if (midiAction == 3) {
+        midiNote = incomingByte;
+        midiAction = 4;
+      }
+      else if (midiAction == 4) {
+        handleNoteOff(offsetChannel, midiNote, incomingByte);
+        midiAction = 0;
+      }
+      else if (midiAction == 5) { //receive bendmsb
+        midiBendLsb = incomingByte;
+        midiAction = 6;
+      }
+      else if (midiAction == 6) {
+        int midiBendVal = (incomingByte << 7) | midiBendLsb;
+        handlePitchBend(offsetChannel, (midiBendVal - 8192) * -1);
+        midiAction = 0;
+      }
+      else if (midiAction == 7) {
+        midiControlNum = incomingByte;
+        midiAction = 8;
+      }
+      else if (midiAction == 8) {
+        handleControlChange(offsetChannel, midiControlNum, incomingByte);
+        midiAction = 0;
       }
     }
   }
