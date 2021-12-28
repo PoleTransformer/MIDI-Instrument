@@ -48,15 +48,15 @@
 #define highDrum2 5
 
 //MIDI Configuration:
-#define timerResolution 80000 //vibrato (ms)
+#define timerResolution 80000 //vibrato (us)
 
-unsigned int period[17];
+unsigned int currentPeriod[17];
+unsigned int originalPeriod[17];
+unsigned int drumDuration[17];
 unsigned long prevMicros[17];
 unsigned long floppyEnvelope[17];
 unsigned long prevDrum[17];
-int drumDuration[17];
-byte originalPitch[17];
-byte acceleration[17];
+byte currentNote[17];
 byte bendSens[17];
 float bendFactor[17];
 float originalBend[17];
@@ -66,6 +66,7 @@ bool floppyDir[17];
 bool bendFlag[17];
 byte controlVal1 = -1;
 byte controlVal2 = -1;
+unsigned long currentTime = 0;
 
 byte midiNote;
 byte midiBendLsb;
@@ -75,6 +76,7 @@ byte offsetChannel;
 
 void setup() {
   Serial.begin(115200);
+  Serial1.begin(115200);
   Timer1.initialize(timerResolution);
   Timer1.attachInterrupt(vibrato);
   for (int i = 2; i < 14; i++) {
@@ -88,6 +90,7 @@ void setup() {
 }
 
 void loop() {
+  currentTime = micros();
   readMIDI();
   stepperMotors(1);
   stepperMotors(2);
@@ -100,7 +103,7 @@ void loop() {
 }
 
 void stepperMotors(byte channel) {
-  if (period[channel] > 0 && micros() - prevMicros[channel] >= period[channel]) {
+  if (currentNote[channel] > 0 && currentTime - prevMicros[channel] >= currentPeriod[channel]) {
     if (channel == 1) {
       digitalWriteFast(stepPin1, HIGH);
       digitalWriteFast(stepPin1, LOW);
@@ -117,27 +120,23 @@ void stepperMotors(byte channel) {
       digitalWriteFast(stepPin4, HIGH);
       digitalWriteFast(stepPin4, LOW);
     }
-    if (originalPitch[channel] < acceleration[channel]) {
-      originalPitch[channel]++;
-      calculatePeriod(channel);
-    }
-    prevMicros[channel] = micros();
+    prevMicros[channel] = currentTime;
   }
 }
 
 void floppyDrives(byte channel) {
-  if (period[channel] > 0 && micros() - prevMicros[channel] >= period[channel]) {
+  if (currentNote[channel] > 0 && currentTime - prevMicros[channel] >= currentPeriod[channel]) {
     if (channel == 5) {
       digitalWriteFast(floppyStep5_1, HIGH);
       digitalWriteFast(floppyStep5_1, LOW);
-      if (bendFlag[5] || micros() - floppyEnvelope[5] >= 10000 && micros() - floppyEnvelope[5] <= 200000) {
+      if (bendFlag[5] || currentTime - floppyEnvelope[5] >= 10000 && currentTime - floppyEnvelope[5] <= 200000) {
         digitalWriteFast(floppyStep5_2, HIGH);
         digitalWriteFast(floppyStep5_2, LOW);
       }
       else {
         digitalWriteFast(floppyStep5_2, HIGH);
       }
-      if (micros() - floppyEnvelope[5] >= 20000 && micros() - floppyEnvelope[5] <= 100000) {
+      if (currentTime - floppyEnvelope[5] >= 20000 && currentTime - floppyEnvelope[5] <= 100000) {
         digitalWriteFast(floppyStep5_3, HIGH);
         digitalWriteFast(floppyStep5_3, LOW);
       }
@@ -148,14 +147,14 @@ void floppyDrives(byte channel) {
     if (channel == 6) {
       digitalWriteFast(floppyStep6_1, HIGH);
       digitalWriteFast(floppyStep6_1, LOW);
-      if (bendFlag[6] || micros() - floppyEnvelope[6] >= 10000 && micros() - floppyEnvelope[6] <= 200000) {
+      if (bendFlag[6] || currentTime - floppyEnvelope[6] >= 10000 && currentTime - floppyEnvelope[6] <= 200000) {
         digitalWriteFast(floppyStep6_2, HIGH);
         digitalWriteFast(floppyStep6_2, LOW);
       }
       else {
         digitalWriteFast(floppyStep6_2, HIGH);
       }
-      if (micros() - floppyEnvelope[6] >= 20000 && micros() - floppyEnvelope[6] <= 100000) {
+      if (currentTime - floppyEnvelope[6] >= 20000 && currentTime - floppyEnvelope[6] <= 100000) {
         digitalWriteFast(floppyStep6_3, HIGH);
         digitalWriteFast(floppyStep6_3, LOW);
       }
@@ -166,14 +165,14 @@ void floppyDrives(byte channel) {
     if (channel == 7) {
       digitalWriteFast(floppyStep7_1, HIGH);
       digitalWriteFast(floppyStep7_1, LOW);
-      if (bendFlag[7] || micros() - floppyEnvelope[7] >= 10000 && micros() - floppyEnvelope[7] <= 200000) {
+      if (bendFlag[7] || currentTime - floppyEnvelope[7] >= 10000 && currentTime - floppyEnvelope[7] <= 200000) {
         digitalWriteFast(floppyStep7_2, HIGH);
         digitalWriteFast(floppyStep7_2, LOW);
       }
       else {
         digitalWriteFast(floppyStep7_2, HIGH);
       }
-      if (micros() - floppyEnvelope[7] >= 20000 && micros() - floppyEnvelope[7] <= 100000) {
+      if (currentTime - floppyEnvelope[7] >= 20000 && currentTime - floppyEnvelope[7] <= 100000) {
         digitalWriteFast(floppyStep7_3, HIGH);
         digitalWriteFast(floppyStep7_3, LOW);
       }
@@ -216,25 +215,25 @@ void floppyDrives(byte channel) {
       }
     }
     floppyDir[channel] = !floppyDir[channel];
-    prevMicros[channel] = micros();
+    prevMicros[channel] = currentTime;
   }
 }
 
 void drum() {
-  if (drumDuration[0] != -1 && micros() - prevDrum[0] >= drumDuration[0]) {
-    drumDuration[0] = -1;
+  if (drumDuration[0] > 0 && currentTime - prevDrum[0] >= drumDuration[0]) {
+    drumDuration[0] = 0;
     digitalWriteFast(bassDrum, LOW);
   }
-  if (drumDuration[1] != -1 && micros() - prevDrum[1] >= drumDuration[1]) {
-    drumDuration[1] = -1;
+  if (drumDuration[1] > 0 && currentTime - prevDrum[1] >= drumDuration[1]) {
+    drumDuration[1] = 0;
     digitalWriteFast(snareDrum, LOW);
   }
-  if (drumDuration[2] != -1 && micros() - prevDrum[2] >= drumDuration[2]) {
-    drumDuration[2] = -1;
+  if (drumDuration[2] > 0 && currentTime - prevDrum[2] >= drumDuration[2]) {
+    drumDuration[2] = 0;
     digitalWriteFast(highDrum2, LOW);
   }
-  if (drumDuration[3] != -1 && micros() - prevDrum[3] >= drumDuration[3]) {
-    drumDuration[3] = -1;
+  if (drumDuration[3] > 0 && currentTime - prevDrum[3] >= drumDuration[3]) {
+    drumDuration[3] = 0;
     digitalWriteFast(highDrum, LOW);
   }
 }
@@ -246,8 +245,8 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
   else if (channel == 10) {
     if (note == 35 || note == 36) { //bass drum
       digitalWriteFast(bassDrum, HIGH);
-      drumDuration[0] = 2000;
-      prevDrum[0] = micros();
+      drumDuration[0] = 1900;
+      prevDrum[0] = currentTime;
     }
     else if (note == 38 || note == 40) { //snare drum
       digitalWriteFast(snareDrum, HIGH);
@@ -255,40 +254,33 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
         drumDuration[1] = 6000;
       }
       else {
-        drumDuration[1] = 2000;
+        drumDuration[1] = 1900;
       }
-      prevDrum[1] = micros();
+      prevDrum[1] = currentTime;
     }
     else if (note == 39 || note == 48 || note == 50 || note == 54 || note == 46 || note == 51
              || note == 59 || note == 49 || note == 57 || note == 37) { //high toms
       digitalWriteFast(highDrum2, HIGH);
       drumDuration[2] = 1500;
-      prevDrum[2] = micros();
+      prevDrum[2] = currentTime;
     }
     else { //low toms
       digitalWriteFast(highDrum, HIGH);
       drumDuration[3] = 200;
-      prevDrum[3] = micros();
+      prevDrum[3] = currentTime;
     }
   }
   else {
-    if (note > 78) {
-      acceleration[channel] = note;
-      originalPitch[channel] = 78;
-    }
-    else {
-      acceleration[channel] = note;
-      originalPitch[channel] = note;
-    }
-    floppyEnvelope[channel] = micros();
-    calculatePeriod(channel);
+    currentNote[channel] = note;
+    originalPeriod[channel] = pitchVals[note];
+    floppyEnvelope[channel] = currentTime;
+    reTrigger(channel);
   }
 }
 
 void handleNoteOff(byte channel, byte note, byte velocity) {
-  if (note == originalPitch[channel]) {
-    period[channel] = 0;
-    originalPitch[channel] = 0;
+  if (note == currentNote[channel]) {
+    currentNote[channel] = 0;
     if (channel == 5) {
       digitalWriteFast(floppyStep5_1, HIGH);
       digitalWriteFast(floppyStep5_2, HIGH);
@@ -322,12 +314,19 @@ void handlePitchBend(byte channel, int bend) {
     bendFlag[channel] = false;
   }
   originalBend[channel] = bendFactor[channel];
-  calculatePeriod(channel);
+  reTrigger(channel);
 }
 
 void handleControlChange(byte channel, byte firstByte, byte secondByte) {
   if (firstByte == 1) { //modulation wheel
-    maxVibrato[channel] = mapF(secondByte, 0.0, 127.0, 0.0, 0.03);
+    if (secondByte == 0) {
+      bendFactor[channel] = originalBend[channel];
+      maxVibrato[channel] = 0;
+      reTrigger(channel);
+    }
+    else {
+      maxVibrato[channel] = mapF(secondByte, 1.0, 127.0, 0.01, 0.03);
+    }
   }
   if (firstByte == 101) {
     controlVal1 = secondByte;
@@ -358,9 +357,23 @@ void vibrato() {
       else {
         bendFactor[i] = originalBend[i] - maxVibrato[i];
       }
-      calculatePeriod(i);
+      reTrigger(i);
       vibratoState[i] = !vibratoState[i];
     }
+  }
+}
+
+void reTrigger(byte channel) {
+  if (currentNote[channel] > 0) {
+    currentPeriod[channel] = originalPeriod[channel] * bendFactor[channel];
+  }
+}
+
+void mute() {
+  for (int i = 0; i < 17; i++) {
+    bendSens[i] = 2;
+    bendFactor[i] = 1;
+    originalBend[i] = 1;
   }
 }
 
@@ -387,31 +400,6 @@ void resetHead() {
   }
   for (int i = 22; i <= 44; i += 2) {
     digitalWrite(i, HIGH);
-  }
-}
-
-void mute() {
-  for (int i = 0; i < 17; i++) {
-    period[i] = 0;
-    prevMicros[i] = 0;
-    floppyEnvelope[i] = 0;
-    prevDrum[i] = 0;
-    drumDuration[i] = -1;
-    originalPitch[i] = 0;
-    bendSens[i] = 2;
-    bendFactor[i] = 1;
-    originalBend[i] = 0;
-    maxVibrato[i] = 0;
-    vibratoState[i] = 0;
-    floppyDir[i] = 0;
-    bendFlag[i] = 0;
-    acceleration[i] = 0;
-  }
-}
-
-void calculatePeriod(byte channel) {
-  if (originalPitch[channel] > 0) {
-    period[channel] = pitchVals[originalPitch[channel]] * bendFactor[channel];
   }
 }
 
@@ -471,7 +459,16 @@ void readMIDI() {
         midiAction = 8;
       }
       else if (midiAction == 8) {
-        handleControlChange(offsetChannel, midiControlNum, incomingByte);
+        if (midiControlNum == 14) {
+          Serial1.write(incomingByte);
+        }
+        else if (midiControlNum == 121) {
+          Serial1.write(121);
+          handleControlChange(offsetChannel, midiControlNum, incomingByte);
+        }
+        else {
+          handleControlChange(offsetChannel, midiControlNum, incomingByte);
+        }
         midiAction = 0;
       }
     }
