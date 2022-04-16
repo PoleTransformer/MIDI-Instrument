@@ -20,4 +20,4 @@ MIDI CC(controller change) messages:
 
 ## Project Update April 15, 2022:
 
-Im currently implementing a sketch based on the L298N H bridge driver. I am testing this sketch on a printer scanbed stepper motor. See the `Printer_MIDI` sketch.
+Im currently implementing a sketch based on the L298N H bridge driver and Arduino Uno. I am testing this sketch on a printer scanbed stepper motor. See the `Printer_MIDI.ino` sketch.
