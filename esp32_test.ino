@@ -7,7 +7,7 @@ bool resetFlag;
 
 #define floppyChannels 2
 #define threshold1 64 //Sustain threshold 0-127
-#define threshold2 100
+#define threshold2 90
 #define threshold3 120
 unsigned int floppyData[] = {17, 15}; //data, latch, clock
 unsigned int floppyLatch[] = {5, 4}; //data, latch, clock
@@ -36,8 +36,8 @@ float maxBend[17];
 bool vibratoState[17];
 bool trill[17];
 
-#define drumCount 2
-unsigned int drums[] = {22, 23};
+#define drumCount 3
+unsigned int drums[] = {22, 23, 2};
 unsigned long previousDrum[17];
 unsigned int drumDuration[17];
 
@@ -191,13 +191,13 @@ void ADSR(byte channel) {
     floppyState[channel] &= B10111111;
   }
   //decay
-  if (currentTime - previousFloppy[channel] >= (attackVal[channel] * 3) + decayVal[channel] && sustainVal[channel] <= threshold3) {
+  if (currentTime - previousFloppy[channel] >= (attackVal[channel] * 3) + decayVal[channel] && sustainVal[channel] <= 96) {
     floppyState[channel] |= B01000000;
   }
-  if (currentTime - previousFloppy[channel] >= (attackVal[channel] * 3) + (decayVal[channel] * 2) && sustainVal[channel] <= threshold2) {
+  if (currentTime - previousFloppy[channel] >= (attackVal[channel] * 3) + (decayVal[channel] * 2) && sustainVal[channel] <= 64) {
     floppyState[channel] |= B00010000;
   }
-  if (currentTime - previousFloppy[channel] >= (attackVal[channel] * 3) + (decayVal[channel] * 3) && sustainVal[channel] <= threshold1) {
+  if (currentTime - previousFloppy[channel] >= (attackVal[channel] * 3) + (decayVal[channel] * 3) && sustainVal[channel] <= 32) {
     floppyState[channel] |= B00000100;
   }
 }
@@ -209,18 +209,23 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
   else if (channel == 10) {
     if (note == 35 || note == 36) {
       drumDuration[1] = map(velocity, 1, 127, 1, 5);
-      drumDuration[5] = map(velocity, 1, 127, 1, 2000); //bass hdd
+      drumDuration[5] = map(velocity, 1, 127, 1, 2400); //bass hdd
       previousDrum[5] = currentTime;
       digitalWrite(drums[0], HIGH);
     }
     else if (note == 38 || note == 40) {
       drumDuration[2] = map(velocity, 1, 127, 1, 10);
-      drumDuration[6] = map(velocity, 1, 127, 1, 1800); //snare hdd
+      drumDuration[6] = map(velocity, 1, 127, 1, 2050); //snare hdd
       previousDrum[6] = currentTime;
       digitalWrite(drums[1], HIGH);
     }
     else {
       drumDuration[3] = map(velocity, 1, 127, 1, 3);
+      if (note == 39 || note == 46 || note == 49 || note == 50 || note == 51 || note == 54) {
+        drumDuration[7] = map(velocity, 1, 127, 5500, 6500);
+        previousDrum[7] = currentTime;
+        digitalWrite(drums[2], HIGH); //solenoid
+      }
     }
   }
   else {
@@ -268,7 +273,7 @@ void handleControlChange(byte channel, byte firstByte, byte secondByte) {
   if (firstByte == 12) { //floppy sustain
     sustainVal[channel] = secondByte;
   }
-  if (firstByte == 13) { //decay 
+  if (firstByte == 13) { //decay
     decayVal[channel] = map(secondByte, 0, 127, 0, 100000);
   }
   if (firstByte == 14) { //stepper special effect
@@ -314,6 +319,10 @@ void reset() {
     attackVal[i] = 10000;
     decayVal[i] = 30000;
     sustainVal[i] = 0;
+    drumDuration[i] = 0;
+  }
+  for (int i = 0; i < drumCount; i++) {
+    digitalWrite(drums[i], LOW);
   }
   for (int i = 5; i < 5 + floppyChannels; i++) {
     for (int j = 0; j < 160; j++) {
