@@ -17,3 +17,7 @@ MIDI CC(controller change) messages:
 13 - Floppy Decay  
 14 - Floppy Trill  
 15 - Floppy Attack  
+
+## Project Update April 15, 2022:
+
+Im currently implementing a sketch based on the L298N H bridge driver. I am testing this sketch on a printer scanbed stepper motor.
