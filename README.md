@@ -13,7 +13,6 @@ What I have tested:
 
 MIDI CC(controller change) messages:  
 
-1 - Vibrato(80ms)  
 12 - Floppy Sustain  
 13 - Floppy Decay  
 14 - Floppy & Stepper Trill(12 semitones 80ms)  
